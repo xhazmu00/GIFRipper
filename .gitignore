@@ -1,27 +1,8 @@
-# Python
 .venv/
-venv/
 __pycache__/
+.pytest_cache/
 *.pyc
-*.pyo
-
-# IDE
-.idea/
-.vscode/
-
-# Dočasné soubory
-*.log
-*.tmp
-*.temp
-
-# Build
 build/
 dist/
-*.egg-info/
-
-# Testy
-.pytest_cache/
-
-# Nahrávky
-recordings/
-output/
+*.spec
+.DS_Store

@@ -8,7 +8,6 @@ No screen capture or video I/O is performed on the editor's GUI thread.
 """
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 import sys
@@ -23,6 +22,7 @@ from PySide6.QtCore import QObject, QRect, QTimer, Signal, Slot
 from PySide6.QtGui import QGuiApplication, QImage
 from PySide6.QtMultimedia import QMediaCaptureSession, QScreenCapture, QVideoSink
 
+from capture_ipc import encode_packet, decode_packet
 from recorder import EncodingQueue, RecorderError
 from x11_capture import X11FrameSource, capture_preview, is_x11_session
 from gnome_wayland import GnomeWaylandRecorder, detect_backend
@@ -32,8 +32,10 @@ _SEND_LOCK = threading.Lock()
 
 def send(event: str, **data):
     with _SEND_LOCK:
-        sys.stdout.write(json.dumps({'event': event, **data}, ensure_ascii=False) + '\n')
-        sys.stdout.flush()
+        # Byte-oriented ASCII JSON survives cp1250/cp1252 Windows codepages.
+        # Unicode Czech messages are escaped and restored by JSON decoding.
+        sys.stdout.buffer.write(encode_packet({'event': event, **data}))
+        sys.stdout.buffer.flush()
 
 
 class CommandInput(QObject):
@@ -45,7 +47,7 @@ class CommandInput(QObject):
             if not line:
                 return
             try:
-                self.command.emit(json.loads(line.decode('utf-8')))
+                self.command.emit(decode_packet(line))
             except Exception as exc:
                 send('error', message=f'Neplatný příkaz: {exc}')
 

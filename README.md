@@ -1,8 +1,15 @@
-# 🎩 GIFRipper 2.6 — Capture / Frame Editor
+# 🎩 GIFRipper 2.7 — Capture / Frame Editor
 
 Desktopový editor a rekordér GIFů inspirovaný LICEcap. Samostatná implementace, nikoli fork LICEcap.
 
-**Novinky verze 2.6 – jemnější rozvržení editoru:**
+**Novinky verze 2.7 – oprava nahrávání na Windows:**
+
+- Opraveno selhání „Nekompatibilní odpověď procesu záznamu: utf-8 codec can't decode byte…“ na Windows s českou lokalizací (např. cp1250).
+- Pomocný proces nyní komunikuje s editorem přes binární pipe a ASCII-safe JSON s Unicode escape sekvencemi. České zprávy i cesty k souborům zůstávají beze ztráty.
+- Změna se týká **jen komunikace procesu**; GNOME/Wayland, X11, samotné snímání ve Windows, UI a střih zůstávají beze změn.
+- Pokud nahrávání na Windows selže po vyřešení kódování, další diagnostika už ukáže skutečný problém backendu.
+
+**Z verze 2.6 – jemnější rozvržení editoru:**
 
 - **OD / DO:** doplněny vnitřní a vnější mezery, takže číselná pole neleží těsně u okrajů posuvného panelu a mají mezeru i mezi sebou.
 - **FPS:** ovladač snímkové frekvence nyní dostává přímo vlastní výraznou barevnou výplň, zelený 2px rámeček, stav hover a minimální šířku 112 px – v tmavém i světlém motivu.
@@ -53,7 +60,7 @@ sudo apt install python3 python3-venv ffmpeg \
 Rozbal ZIP do vlastní složky (doporučeno **nedávat novou verzi přes starou**), potom:
 
 ```bash
-cd GIFRipper-v2.6
+cd GIFRipper-v2.7
 chmod +x run.sh
 ./run.sh
 ```
@@ -188,3 +195,9 @@ Výpis ukáže, zda je k dispozici GNOME Shell ScreenCast D-Bus. Není pořízen
 ```
 
 Po 3sekundovém odpočtu nahrává 3 sekundy a uloží `wayland-test.gif`. Pokud nahrávání selže, pošli výpis chyby. Bez souhlasu se žádná obrazovka nahrávat nebude.
+
+### Test opravy Windows kódování
+
+Z adresáře projektu: `python -m pytest tests/test_windows_ipc.py -q` (pro celou sadu `python -m pytest -q`). Test simuluje systémové kódování `cp1250`, běžné na českých Windows.
+
+Nejjednodušší je rozbalit celý ZIP verze 2.7 do nové složky a spustit `run_windows.bat`. Pokud používáš GitHub, nejdřív nahraj změny verze 2.7 do svého repozitáře z Ubuntu (`git add .`, `git commit`, `git push`); teprve potom můžeš aktualizovat Windows příkazem `git pull`. **Nepřenášej samotný `capture_agent.py` bez nového souboru `capture_ipc.py`.**

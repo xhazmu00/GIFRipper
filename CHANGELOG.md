@@ -1,3 +1,10 @@
+# GIFRipper 2.7
+
+- **Windows / české systémové kódování:** Opraveno čtení stavových zpráv z pomocného nahrávacího procesu. Textový stdout s `ensure_ascii=False` na Windows vytvářel nevalidní UTF-8 (`cp1250`), které hlavní okno odmítlo.
+- JSON zprávy se nyní serializují do čistého ASCII (Unicode jako JSON escape) a přenášejí binárně; stejný formát používají příkazy rodiče.
+- Regresní testy pokrývají české diakritické znaky, české cesty k souborům, rozdělení zpráv mezi více čtení a nucené kódování cp1250.
+- Bez funkčních změn v Qt snímání, GNOME/Wayland, X11, editoru nebo vzhledu.
+
 # GIFRipper 2.6
 
 - OD/DO mají vodorovné a svislé odsazení, pole mají od sebe větší mezeru.

@@ -11,7 +11,6 @@ from pathlib import Path
 import os
 import sys
 import time
-import json
 
 # Qt must use Wayland's native backend to obtain portal-mediated ScreenCast.
 # Qt may otherwise run as an XWayland app and only see X11 windows.
@@ -26,6 +25,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QFrame, QHBox
                                QSizePolicy, QScrollArea, QGraphicsDropShadowEffect, QDialog)
 from PySide6.QtGui import QColor
 
+from capture_ipc import encode_packet, decode_packet
 from editor import GifProject
 from theme import PALETTES, stylesheet, inspector_action_style, inspector_field_style
 from recorder import RecorderError, ffmpeg_binary
@@ -419,7 +419,7 @@ class GifRipper(QMainWindow):
         self.status.setObjectName('statusText')
         status.addWidget(self.status)
         status.addStretch()
-        status.addWidget(tag('GIFRIPPER 2.6  •   CROSS-PLATFORM', '#66738b',9))
+        status.addWidget(tag('GIFRIPPER 2.7  •   CROSS-PLATFORM', '#66738b',9))
         status.addSpacing(12)
         # Appearance is a secondary preference, deliberately kept away from
         # Open / Record / Export in the primary toolbar.
@@ -801,8 +801,7 @@ class GifRipper(QMainWindow):
     def _send_capture_command(self, action: str, **data):
         proc = self.capture_process
         if proc and proc.state() == QProcess.ProcessState.Running:
-            payload = json.dumps({'action':action, **data}, ensure_ascii=False) + '\n'
-            proc.write(payload.encode('utf-8'))
+            proc.write(encode_packet({'action': action, **data}))
             return True
         return False
 
@@ -819,7 +818,7 @@ class GifRipper(QMainWindow):
             line, _, rest = self._agent_stdout.partition(b'\n')
             self._agent_stdout = bytearray(rest)
             try:
-                self._handle_capture_event(json.loads(line.decode('utf-8')))
+                self._handle_capture_event(decode_packet(line))
             except (ValueError, UnicodeDecodeError) as exc:
                 self.fail_capture('Nekompatibilní odpověď procesu záznamu: '+str(exc))
                 return
