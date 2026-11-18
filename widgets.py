@@ -276,114 +276,215 @@ class Timeline(QWidget):
 
 
 class RegionCanvas(QWidget):
+    """Screen-sized screenshot picker; map logical cursor pixels to captured pixels."""
+    selection_changed = Signal()
+    resized = Signal()
+
     def __init__(self, image: QImage):
         super().__init__()
         self.image = image
-        self.start = None
-        self.finish = None
-        self.setMinimumSize(640, 340)
+        self.start: QPoint | None = None
+        self.finish: QPoint | None = None
         self.setMouseTracking(True)
         self.setCursor(Qt.CursorShape.CrossCursor)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
     def viewbox(self) -> QRectF:
-        iw, ih = self.image.width(), self.image.height()
-        s = min(self.width()/iw, self.height()/ih)
-        w, h = iw*s, ih*s
-        return QRectF((self.width()-w)/2, (self.height()-h)/2, w, h)
+        iw, ih = max(1, self.image.width()), max(1, self.image.height())
+        scale = min(self.width() / iw, self.height() / ih)
+        w, h = iw * scale, ih * scale
+        return QRectF((self.width() - w) / 2, (self.height() - h) / 2, w, h)
 
-    def source_point(self, pos):
+    def source_point(self, pos) -> QPoint:
         view = self.viewbox()
-        x = (pos.x()-view.x())/view.width()*self.image.width()
-        y = (pos.y()-view.y())/view.height()*self.image.height()
-        return QPoint(int(max(0,min(self.image.width()-1,x))),
-                      int(max(0,min(self.image.height()-1,y))))
+        x = (pos.x() - view.x()) / max(1, view.width()) * self.image.width()
+        y = (pos.y() - view.y()) / max(1, view.height()) * self.image.height()
+        return QPoint(int(max(0, min(self.image.width() - 1, x))),
+                      int(max(0, min(self.image.height() - 1, y))))
+
+    def clear_selection(self):
+        self.start = None
+        self.finish = None
+        self.selection_changed.emit()
+        self.update()
 
     def selection(self) -> QRect:
-        if not self.start or not self.finish:
-            return QRect(0,0,self.image.width(),self.image.height())
-        return QRect(self.start,self.finish).normalized().intersected(self.image.rect())
+        if self.start is None or self.finish is None:
+            return QRect(0, 0, self.image.width(), self.image.height())
+        return QRect(self.start, self.finish).normalized().intersected(self.image.rect())
 
     def paintEvent(self, _):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        p.fillRect(self.rect(), QColor('#090c13'))
+        p.fillRect(self.rect(), QColor('#0A101A'))
         box = self.viewbox()
         p.drawImage(box, self.image)
-        if self.start and self.finish:
+
+        if self.start is not None and self.finish is not None:
             r = self.selection()
-            x = box.x()+r.x()/self.image.width()*box.width()
-            y = box.y()+r.y()/self.image.height()*box.height()
-            w = r.width()/self.image.width()*box.width()
-            h = r.height()/self.image.height()*box.height()
-            p.setPen(QPen(QColor('#c4ff28'), 3))
-            p.setBrush(QColor(196, 255, 40, 30))
-            p.drawRect(QRectF(x,y,w,h))
-            p.setPen(QColor('#ffffff'))
-            p.setFont(QFont('Inter',10,QFont.Weight.Bold))
-            p.drawText(QRectF(x+6,y+7,max(140,w),25),f'{r.width()} × {r.height()} px')
+            x = box.x() + r.x() / self.image.width() * box.width()
+            y = box.y() + r.y() / self.image.height() * box.height()
+            w = r.width() / self.image.width() * box.width()
+            h = r.height() / self.image.height() * box.height()
+            # Darken outside selected area, not the image the user is targeting.
+            shade = QColor(4, 9, 19, 145)
+            p.fillRect(QRectF(0, 0, self.width(), max(0, y)), shade)
+            p.fillRect(QRectF(0, y, max(0, x), max(0, h)), shade)
+            p.fillRect(QRectF(x + w, y, max(0, self.width() - x - w), max(0, h)), shade)
+            p.fillRect(QRectF(0, y + h, self.width(), max(0, self.height() - y - h)), shade)
+            p.setPen(QPen(QColor('#C4FF28'), 2))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRect(QRectF(x, y, w, h))
+            p.setPen(QColor('#FFFFFF'))
+            p.setFont(QFont('Segoe UI', 10, QFont.Weight.Bold))
+            label = f'{r.width()} × {r.height()} px'
+            labelw = p.fontMetrics().horizontalAdvance(label) + 20
+            labelx = min(max(6, x + 5), max(6, self.width() - labelw - 6))
+            labely = y + 7 if y < 38 else y - 31
+            labelbox = QRectF(labelx, labely, labelw, 25)
+            p.fillRect(labelbox, QColor(9, 18, 30, 220))
+            p.drawText(labelbox, Qt.AlignmentFlag.AlignCenter, label)
+        else:
+            p.fillRect(self.rect(), QColor(0, 0, 0, 25))
+        p.end()
 
     def mousePressEvent(self, ev):
+        if ev.button() != Qt.MouseButton.LeftButton or not self.viewbox().contains(ev.position()):
+            return
         self.start = self.source_point(ev.position())
         self.finish = self.start
+        self.selection_changed.emit()
         self.update()
 
     def mouseMoveEvent(self, ev):
-        if self.start and ev.buttons() & Qt.MouseButton.LeftButton:
+        if self.start is not None and ev.buttons() & Qt.MouseButton.LeftButton:
             self.finish = self.source_point(ev.position())
+            self.selection_changed.emit()
             self.update()
 
     def mouseReleaseEvent(self, ev):
-        if self.start:
+        if self.start is not None and ev.button() == Qt.MouseButton.LeftButton:
             self.finish = self.source_point(ev.position())
+            self.selection_changed.emit()
             self.update()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.resized.emit()
 
 
 class RegionDialog(QDialog):
+    """Borderless full-screen selector with a compact floating toolbar."""
     def __init__(self, frame: QImage, parent=None):
         super().__init__(parent)
         self.setWindowTitle('GIFRipper · Vyber oblast záznamu')
-        self.setMinimumSize(780, 540)
-        self.resize(980, 660)
-        from theme import stylesheet, PALETTES
-        theme = getattr(parent, 'theme', 'dark')
-        colors = PALETTES[theme]
-        self.setStyleSheet(stylesheet(theme) +
-            'QDialog {background:%s;} QPushButton {padding:11px 18px;}' % colors['bg'])
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(18,18,18,18)
-        layout.setSpacing(13)
-        top = QLabel('NAHRÁVÁNÍ  /  VÝBĚR OBLASTI')
-        top.setStyleSheet('font-weight:bold; font-size:16px;')
-        layout.addWidget(top)
-        info = QLabel('Táhni myší po zachycené obrazovce. Bez výběru se nahraje celá obrazovka.')
-        info.setStyleSheet('color:%s;' % colors['muted'])
-        layout.addWidget(info)
+        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint |
+                            Qt.WindowType.WindowStaysOnTopHint)
+        self.setWindowState(Qt.WindowState.WindowFullScreen)
+        # The capture agent records the primary screen. Map the dialog there.
+        from PySide6.QtGui import QGuiApplication
+        screen = QGuiApplication.primaryScreen()
+        if screen is not None and self.windowHandle() is not None:
+            self.windowHandle().setScreen(screen)
+        self.setStyleSheet("""
+            QFrame#regionHUD, QFrame#regionActions {
+                background-color: rgba(12, 20, 35, 244);
+                border: 1px solid rgba(184, 211, 248, 95);
+                border-radius: 15px;
+            }
+            QLabel#regionTitle {color:#F8FBFF; font-size:13px; font-weight:800;}
+            QLabel#regionHint {color:#BFCCE1; font-size:11px;}
+            QPushButton#regionCancel, QPushButton#regionWhole, QPushButton#regionStart {
+                border-radius: 10px; border: 2px solid #71819E;
+                background: #26364D; color: #F4F8FF;
+                padding: 8px 13px; min-height: 24px;
+                font-size: 12px; font-weight: 750;
+            }
+            QPushButton#regionCancel:hover {background:#364A65;}
+            QPushButton#regionWhole {border-color:#7EC6FF; background:#173D60; color:#E9F6FF;}
+            QPushButton#regionWhole:hover {background:#275982;}
+            QPushButton#regionStart {border-color:#C4FF28; background:#C4FF28; color:#142206;}
+            QPushButton#regionStart:hover {background:#DFFF77;}
+        """)
+        body = QVBoxLayout(self)
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(0)
         self.canvas = RegionCanvas(frame)
-        layout.addWidget(self.canvas,1)
-        row = QHBoxLayout()
+        body.addWidget(self.canvas)
+
+        self.hud = QFrame(self.canvas)
+        self.hud.setObjectName('regionHUD')
+        head = QVBoxLayout(self.hud)
+        head.setContentsMargins(15, 10, 15, 10)
+        head.setSpacing(3)
+        title = QLabel('✂  GIFRipper  ·  VÝBĚR OBLASTI')
+        title.setObjectName('regionTitle')
+        head.addWidget(title)
+        self.hint = QLabel('Táhni myší pro výběr  ·  Esc zruší')
+        self.hint.setObjectName('regionHint')
+        head.addWidget(self.hint)
+
+        self.actions = QFrame(self.canvas)
+        self.actions.setObjectName('regionActions')
+        row = QHBoxLayout(self.actions)
+        row.setContentsMargins(12, 9, 12, 9)
+        row.setSpacing(9)
         cancel = button('Zrušit')
+        cancel.setObjectName('regionCancel')
         cancel.clicked.connect(self.reject)
-        full = button('Celá obrazovka')
+        full = button('▣  Celá obrazovka')
+        full.setObjectName('regionWhole')
+        full.setToolTip('Začne nahrávání celé obrazovky po 3sekundovém odpočtu')
         full.clicked.connect(self.full_screen)
-        okay = button('●  Začít nahrávat', 'accent')
+        okay = button('●  Nahrát výběr', 'accent')
+        okay.setObjectName('regionStart')
         okay.clicked.connect(self.accept_if_valid)
         row.addWidget(cancel)
-        row.addStretch()
         row.addWidget(full)
         row.addWidget(okay)
-        layout.addLayout(row)
+
+        self.canvas.selection_changed.connect(self._selection_changed)
+        self.canvas.resized.connect(self._position_hud)
+        QTimer.singleShot(0, self._position_hud)
+
+    def _selection_changed(self):
+        if self.canvas.start is not None and self.canvas.finish is not None:
+            r = self.canvas.selection()
+            self.hint.setText(f'Vybráno: {r.width()} × {r.height()} px  ·  Enter spustí')
+        else:
+            self.hint.setText('Táhni myší pro výběr  ·  Esc zruší')
+        self._position_hud()
+
+    def _position_hud(self):
+        self.hud.adjustSize()
+        self.actions.adjustSize()
+        width, height = self.canvas.width(), self.canvas.height()
+        self.hud.move(16, 16)
+        self.actions.move(max(6, (width - self.actions.width()) // 2),
+                          max(6, height - self.actions.height() - 20))
+        self.hud.raise_()
+        self.actions.raise_()
 
     def full_screen(self):
-        self.canvas.start = self.canvas.finish = None
-        self.canvas.update()
+        """One click really starts full-screen recording; no separate Start needed."""
+        self.canvas.clear_selection()
+        self.accept_if_valid()
 
     def accept_if_valid(self):
         from PySide6.QtWidgets import QMessageBox
-        r = self.canvas.selection()
-        if r.width() < 80 or r.height() < 60:
+        rect = self.canvas.selection()
+        if rect.width() < 80 or rect.height() < 60:
             QMessageBox.warning(self, 'Příliš malá oblast', 'Vyber alespoň 80 × 60 pixelů.')
             return
         self.accept()
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self.accept_if_valid()
+        elif event.key() == Qt.Key.Key_Escape:
+            self.reject()
+        else:
+            super().keyPressEvent(event)
 
     def selected_region(self) -> QRect:
         return self.canvas.selection()

@@ -1,3 +1,11 @@
+# GIFRipper 2.8
+
+- Windows / X11 / Qt: výběrové okno nahrazeno bezrámečkovým fullscreen overlayem se screenshotem jako pozadím a kompaktní plovoucí lištou.
+- Tlačítko **Celá obrazovka** nyní provádí skutečné potvrzení celého náhledu a po třech sekundách zahájí záznam (dříve jen mazalo výběr).
+- Region je vizuálně označen 2px zeleným rámem se ztmavením okolí a uvedením rozměrů; klávesy Enter/Esc.
+- Opraveno souřadnicové škálování 125%/150% DPI a možnost vybrat oblast začínající na (0, 0).
+- GNOME Wayland backend, IPC kódování, nahrávání, zpracování GIFu a editor nebyly měněny.
+
 # GIFRipper 2.7
 
 - **Windows / české systémové kódování:** Opraveno čtení stavových zpráv z pomocného nahrávacího procesu. Textový stdout s `ensure_ascii=False` na Windows vytvářel nevalidní UTF-8 (`cp1250`), které hlavní okno odmítlo.

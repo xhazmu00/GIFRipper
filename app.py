@@ -419,7 +419,7 @@ class GifRipper(QMainWindow):
         self.status.setObjectName('statusText')
         status.addWidget(self.status)
         status.addStretch()
-        status.addWidget(tag('GIFRIPPER 2.7  •   CROSS-PLATFORM', '#66738b',9))
+        status.addWidget(tag('GIFRIPPER 2.8  •   CROSS-PLATFORM', '#66738b',9))
         status.addSpacing(12)
         # Appearance is a secondary preference, deliberately kept away from
         # Open / Record / Export in the primary toolbar.

@@ -1,8 +1,18 @@
-# 🎩 GIFRipper 2.7 — Capture / Frame Editor
+# 🎩 GIFRipper 2.8 — Capture / Frame Editor
 
 Desktopový editor a rekordér GIFů inspirovaný LICEcap. Samostatná implementace, nikoli fork LICEcap.
 
-**Novinky verze 2.7 – oprava nahrávání na Windows:**
+**Novinky verze 2.8 – výběr oblasti na Windows / X11 / macOS:**
+
+- **Bez velkého okna:** výběr oblasti nově zobrazuje screenshot přes celou plochu bez rámů a horní lišty. Ovládací prvky jsou v malém plovoucím panelu dole; už nepřekáží rozměrný dialog 980 × 660 px.
+- **Celá obrazovka rovnou spustí záznam:** původní tlačítko jen mazalo výběr; nyní potvrdí celý náhled a pokračuje 3sekundovým odpočtem. Druhý klik na Začít není potřeba.
+- **Výběr tažením myší:** přesný zelený rámeček a ztmavené okolí, popisek rozlišení, Enter = potvrdit, Esc = zrušit.
+- **Oprava souřadnic a kraje:** převod souřadnic náhledu na skutečné pixely záznamu počítá s vysokým DPI/škálováním Windows (např. 125 %); funguje také výběr od levého horního rohu.
+- **Ubuntu GNOME Wayland:** beze změn; dál se používá ověřená celoplošná větev GNOME Shell ScreenCast. Výběr regionu v této větvi zatím není implementován.
+- Na Windows zatím není možné v tomto testovacím prostředí spustit reálné Qt GUI; ověřeno staticky, testy a kontrolou Python syntaxe.
+
+**Z verze 2.7 – oprava nahrávání na Windows:**
+
 
 - Opraveno selhání „Nekompatibilní odpověď procesu záznamu: utf-8 codec can't decode byte…“ na Windows s českou lokalizací (např. cp1250).
 - Pomocný proces nyní komunikuje s editorem přes binární pipe a ASCII-safe JSON s Unicode escape sekvencemi. České zprávy i cesty k souborům zůstávají beze ztráty.
@@ -60,7 +70,7 @@ sudo apt install python3 python3-venv ffmpeg \
 Rozbal ZIP do vlastní složky (doporučeno **nedávat novou verzi přes starou**), potom:
 
 ```bash
-cd GIFRipper-v2.7
+cd GIFRipper-v2.8
 chmod +x run.sh
 ./run.sh
 ```
@@ -104,7 +114,7 @@ Aplikace pro macOS je implementována, ale **na skutečném Macu nebyla otestov�
 ## Použití
 
 - **GNOME Wayland:** **Nahrát obrazovku** → **3…2…1** → nahrávání celého monitoru/plochy → **Zastavit a uložit**.
-- **X11, Windows, macOS, ostatní Qt:** **Nahrát obrazovku** → vybrat oblast → **3…2…1** → nahrávání.
+- **X11, Windows, macOS, ostatní Qt:** **Nahrát obrazovku** → v bezrámečkovém náhledu označit oblast → **Nahrát výběr** (nebo rovnou **Celá obrazovka**) → **3…2…1** → nahrávání.
 - Plovoucí lišta má **Pauza/Pokračovat** a **Zastavit a uložit**.
 - **Otevřít GIF**, poté šipky ←/→ pro krokování snímků; mezerník pro přehrávání.
 - **Označit OD/DO** pomocí spinboxů, tlačítek, Shift+klik a Alt+klik na časové ose. **Vystřihnout úsek** odstraní obě krajní snímky včetně obsahu mezi nimi.
@@ -200,4 +210,4 @@ Po 3sekundovém odpočtu nahrává 3 sekundy a uloží `wayland-test.gif`. Pokud
 
 Z adresáře projektu: `python -m pytest tests/test_windows_ipc.py -q` (pro celou sadu `python -m pytest -q`). Test simuluje systémové kódování `cp1250`, běžné na českých Windows.
 
-Nejjednodušší je rozbalit celý ZIP verze 2.7 do nové složky a spustit `run_windows.bat`. Pokud používáš GitHub, nejdřív nahraj změny verze 2.7 do svého repozitáře z Ubuntu (`git add .`, `git commit`, `git push`); teprve potom můžeš aktualizovat Windows příkazem `git pull`. **Nepřenášej samotný `capture_agent.py` bez nového souboru `capture_ipc.py`.**
+Nejjednodušší je rozbalit celý ZIP verze 2.8 do nové složky a spustit `run_windows.bat`. Pokud používáš GitHub, nejdřív nahraj změny verze 2.7 do svého repozitáře z Ubuntu (`git add .`, `git commit`, `git push`); teprve potom můžeš aktualizovat Windows příkazem `git pull`. **Nepřenášej samotný `capture_agent.py` bez nového souboru `capture_ipc.py`.**
