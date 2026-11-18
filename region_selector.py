@@ -1,16 +1,36 @@
-"""Click-drag-release screen-snipping overlay for Windows.
+"""Live, translucent click-drag-release screen-snipping overlay for Windows.
 
-No dialog, buttons or nested event loop. A screenshot from the SAME capture
-backend is displayed on its monitor, so the selected rect maps directly to
-pixels in the recorded QVideoFrame stream.
+This is a layered, transparent top-level window: it NEVER draws the preview
+frame, which may be blank/gray or stale depending on the capture backend.
+Instead the real desktop remains visible through the window, just like the
+Windows Snipping Tool. The preview frame only supplies physical pixel size,
+so selections still match the QVideoFrame stream at high-DPI scaling.
 """
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QRect, QPoint, Signal
-from PySide6.QtGui import QImage, QPixmap, QPainter, QPen, QColor, QFont
+from PySide6.QtGui import QImage, QPainter, QPen, QColor, QFont
 from PySide6.QtWidgets import QWidget
 
 from recording_flow import region_from_logical_rect
+
+
+def shade_outside_selection(painter: QPainter, bounds: QRect,
+                            selection: QRect, shade: QColor) -> None:
+    """Dim only the unselected space, leaving the selected area alpha=0."""
+    selection = selection.intersected(bounds)
+    if selection.isEmpty():
+        painter.fillRect(bounds, shade)
+        return
+    # All rectangles are local coordinates within the overlay window.
+    painter.fillRect(QRect(bounds.left(), bounds.top(), bounds.width(),
+                           selection.top() - bounds.top()), shade)
+    painter.fillRect(QRect(bounds.left(), selection.bottom() + 1, bounds.width(),
+                           bounds.bottom() - selection.bottom()), shade)
+    painter.fillRect(QRect(bounds.left(), selection.top(),
+                           selection.left() - bounds.left(), selection.height()), shade)
+    painter.fillRect(QRect(selection.right() + 1, selection.top(),
+                           bounds.right() - selection.right(), selection.height()), shade)
 
 
 class RegionSelector(QWidget):
@@ -22,13 +42,20 @@ class RegionSelector(QWidget):
                          Qt.WindowType.WindowStaysOnTopHint)
         if screenshot.isNull():
             raise ValueError('Náhled obrazovky je prázdný.')
-        self._screenshot = QPixmap.fromImage(screenshot)
+        # The preview establishes the physical capture dimensions, but it is
+        # never drawn: a cached frame may be gray or stale on Windows.
         self._pixels = (screenshot.width(), screenshot.height())
         self._anchor: QPoint | None = None
         self._cursor: QPoint | None = None
         self._dragging = False
         self._message = 'Tažením myši vyber oblast  •  Esc zruší výběr'
         self.setWindowTitle('GIFRipper · Vyber oblast obrazovky')
+        # WA_TranslucentBackground enables a per-pixel alpha top-level window
+        # on Windows (the FramelessWindowHint is necessary for this there).
+        # WA_NoSystemBackground stops native styles filling the surface gray.
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        self.setAutoFillBackground(False)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setCursor(Qt.CursorShape.CrossCursor)
@@ -51,15 +78,17 @@ class RegionSelector(QWidget):
     def paintEvent(self, _event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-        # Draw the captured desktop edge-to-edge, not an embedded scaled dialog.
-        painter.drawPixmap(self.rect(), self._screenshot)
-        painter.fillRect(self.rect(), QColor(5, 12, 22, 115))
+        # Clear the backing store to *transparent* for each repaint. Painting
+        # the whole window with an opaque screenshot here prevents the user
+        # from seeing the live desktop and caused the reported gray screen.
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 0))
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+
         selection = self._rect()
+        shade = QColor(5, 12, 22, 68)  # Light shade; desktop remains visible.
+        shade_outside_selection(painter, self.rect(), selection, shade)
         if not selection.isEmpty():
-            painter.save()
-            painter.setClipRect(selection)
-            painter.drawPixmap(self.rect(), self._screenshot)
-            painter.restore()
             painter.setPen(QPen(QColor('#B8FF54'), 2))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRect(selection.adjusted(0, 0, -1, -1))

@@ -1,3 +1,11 @@
+# GIFRipper 3.1 — živý průhledný výběr výseče Windows
+
+- Oprava šedého pozadí: Windows výběr už nevykresluje uložený snímek z Qt ScreenCapture, který může být šedý nebo zastaralý. Místo toho používá skutečně průhledné bezrámečkové okno s `WA_TranslucentBackground` a `WA_NoSystemBackground`.
+- Celá pracovní plocha je během výběru vidět živě. Mimo označení ji kryje pouze jemná poloprůhledná vrstva; uvnitř označení je plocha naprosto průhledná a ohraničená zeleně.
+- Ovládání beze změny: klik, táhnout, pustit → automatické potvrzení, odpočet a nahrávání. Esc → zrušení.
+- Nové regresní testy průhlednosti QPainter (spouští se, když je dostupné PySide6) a statické kontroly zapojení.
+- Nahrávací backendy a GNU/Linux Wayland nejsou změněny. Ověření samotného okna na reálném Windows zůstává potřeba.
+
 # GIFRipper 3.0 — dva režimy záznamu ve Windows
 
 - Windows: dvě samostatná tlačítka „Nahrát celou obrazovku“ a „Nahrát výseč obrazovky“.

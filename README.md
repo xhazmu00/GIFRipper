@@ -1,13 +1,22 @@
-# 🎩 GIFRipper 3.0 — Capture / Frame Editor
+# 🎩 GIFRipper 3.1 — Capture / Frame Editor
 
 Desktopový editor a rekordér GIFů inspirovaný LICEcap. Samostatná implementace, nikoli fork LICEcap.
+
+**Novinka 3.1 – průhledný výběr výseče ve Windows:**
+
+- Výběr je nyní **skutečně průhledné celoobrazovkové okno** nad živou pracovní plochou. Nevykresluje uložený screenshot, který mohl být z Qt šedý nebo zastaralý.
+- Nevybraná část obrazovky je jen **lehce ztmavená** (27 %), označený obdélník zůstává **úplně průhledný** a je ohraničený zeleně.
+- **Klikni, táhni a pusť** pro potvrzení; `Esc` výběr zruší. Žádné dialogy ani potvrzovací tlačítko.
+- Screenshot z pomocného procesu nyní slouží pouze k určení velikosti nahrávaných pixelů (DPI); do průhledné vrstvy se nekreslí.
+- GNOME/Wayland, Windows nahrávací backend, třísekundový odpočet i GIF editor zůstávají beze změny.
+- **Omezení testování:** vzhled průhlednosti je potřeba ověřit na reálném Windows. Automatické testy kontrolují geometrii, průhlednost kreslicího algoritmu a přítomnost nastavení Qt vrstvy; v tomto prostředí není PySide6.
 
 **Novinky 3.0 – dva způsoby nahrávání pro Windows:**
 
 - **Nahrát celou obrazovku:** původní spolehlivá větev. Kliknutí → první snímek z Qt → odpočet 3–2–1 → záznam primárního monitoru. Žádné výběrové okno.
-- **Nahrát výseč obrazovky:** nejdříve schová okno GIFRipperu a pořídí snímek primárního monitoru přes *stejný* Qt backend, který bude nahrávat. Potom ukáže tento snímek přes celý monitor jako jednoduchý overlay: **klikni a táhni levým tlačítkem myši, pusť → potvrdí se výběr → odpočet 3–2–1 → nahrávání výseče**.
+- **Nahrát výseč obrazovky:** nejdříve schová okno GIFRipperu a pořídí snímek primárního monitoru přes *stejný* Qt backend, který bude nahrávat. Potom otevře průhledný overlay nad živou plochou: **klikni a táhni levým tlačítkem myši, pusť → potvrdí se výběr → odpočet 3–2–1 → nahrávání výseče**.
 - **Esc** zruší výběr bez záznamu. Pro malý výběr se ukáže upozornění a můžeš ho vybrat znovu (minimum 80 × 60 px).
-- Žádné velké dialogové okno, žádný potvrzovací panel ani tlačítko „Celá obrazovka“ uvnitř výběru. Obraz je vykreslen přes celou plochu monitoru.
+- Žádné velké dialogové okno, žádný potvrzovací panel ani tlačítko „Celá obrazovka“ uvnitř výběru. Pracovní plocha je vidět živě pod průhlednou výběrovou vrstvou.
 - Souřadnice výběru se přesně převádějí z Qt logických pixelů na fyzické pixely zachytávaného monitoru (testy pokrývají 100 %, 125 %, 150 % i 200% škálování).
 - **Ubuntu GNOME Wayland:** nadále používá dosavadní funkční nativní GNOME rekordér, který nahrává celou plochu. **macOS/Linux:** mají zatím jedno tlačítko pro celou obrazovku. Windows má obě tlačítka.
 - Výběr se týká primárního monitoru. Nahrávání jiné obrazovky nebo kombinace více monitorů zatím není součástí této verze.
@@ -88,7 +97,7 @@ sudo apt install python3 python3-venv ffmpeg \
 Rozbal ZIP do vlastní složky (doporučeno **nedávat novou verzi přes starou**), potom:
 
 ```bash
-cd GIFRipper-v3.0
+cd GIFRipper-v3.1
 chmod +x run.sh
 ./run.sh
 ```
@@ -228,4 +237,4 @@ Po 3sekundovém odpočtu nahrává 3 sekundy a uloží `wayland-test.gif`. Pokud
 
 Z adresáře projektu: `python -m pytest tests/test_windows_ipc.py -q` (pro celou sadu `python -m pytest -q`). Test simuluje systémové kódování `cp1250`, běžné na českých Windows.
 
-Nejjednodušší je rozbalit celý ZIP verze 3.0 do nové složky a spustit `run_windows.bat`. Pokud používáš GitHub, nejdřív nahraj změny verze 3.0 do svého repozitáře z Ubuntu (`git add .`, `git commit`, `git push`); teprve potom můžeš aktualizovat Windows příkazem `git pull`. **Nepřenášej samotný `capture_agent.py` bez nového souboru `capture_ipc.py`.**
+Nejjednodušší je rozbalit celý ZIP verze 3.1 do nové složky a spustit `run_windows.bat`. Pokud používáš GitHub, nejdřív nahraj změny verze 3.1 do svého repozitáře z Ubuntu (`git add .`, `git commit`, `git push`); teprve potom můžeš aktualizovat Windows příkazem `git pull`. **Nepřenášej samotný `capture_agent.py` bez nového souboru `capture_ipc.py`.**
