@@ -1,3 +1,25 @@
+# GIFRipper 3.2 — fialové rozhraní podle vizuálního návrhu č. 2
+
+**Vizuální aktualizace oproti 3.1.** Změnil se pouze frontend aplikace (příslušné části `app.py`, `modern_ui.py`, `modern_theme.py`, `widgets.py` a ikony). Všechny soubory pro zachytávání, výběr oblasti, střih a export jsou oproti 3.1 beze změny. Nové rozmístění i světelný/tmavý motiv byly inspirovány uživatelem dodanými referenčními obrázky.
+
+- **Nahrávání:** vlevo vyber „Nahrávání“, zvol kartu „Nahrát celou obrazovku“ nebo na Windows „Nahrát výseč obrazovky“ a klikni na **Spustit nahrávání**. Na Ubuntu Wayland zůstává dostupný ověřený záznam celé plochy přes GNOME Shell.
+- **Upravit GIF:** otevírání a export GIFu, náhled, ovládání po snímcích, časová osa a tři skutečné panely pro střih úseku, rychlý střih a historii změn.
+- **Moje GIFy:** rychlý přístup k naposledy otevřenému GIFu a výběr libovolného souboru.
+- **Nastavení:** světlý/tmavý režim a zkratky. Přepínání režimů také `Ctrl+L`.
+- **Poznámka k návrhům:** některé graficky zobrazené funkce na vzorových obrázcích (prostorový crop, změna rozlišení, optimalizace, automatický délkový limit) nebyly součástí 3.1. Ve 3.2 nejsou vydávány za hotové funkce; jde o změnu vzhledu při zachování původního rozsahu funkcí.
+
+## Spuštění
+
+- **Windows:** `run_windows.bat`
+- **Ubuntu:** `./run.sh`
+- **macOS:** `./run_macos.command` (funkce zachytávání vyžadují oprávnění systému)
+
+Nejdříve nainstaluj Python 3 a FFmpeg podle příslušné platformy. Při prvním spuštění spouštěč vytvoří prostředí `.venv` a nainstaluje závislosti. Opravdové grafické vykreslení je potřeba otestovat na cílové platformě; statické testy nenahrazují test GUI.
+
+---
+
+## Historie předchozích verzí
+
 # 🎩 GIFRipper 3.1 — Capture / Frame Editor
 
 Desktopový editor a rekordér GIFů inspirovaný LICEcap. Samostatná implementace, nikoli fork LICEcap.

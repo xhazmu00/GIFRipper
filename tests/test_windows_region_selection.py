@@ -54,12 +54,15 @@ def test_invalid_geometry_rejected(bad):
 
 
 def test_windows_has_two_explicit_actions():
-    assert "if sys.platform == 'win32':" in APP
-    assert 'Nahrát celou obrazovku' in APP
-    assert 'Nahrát výseč obrazovky' in APP
-    assert 'self.region_btn.clicked.connect(self.record_region_action)' in APP
+    ui = (ROOT / 'modern_ui.py').read_text(encoding='utf-8')
+    assert "if sys.platform == 'win32':" in ui
+    assert 'Nahrát celou obrazovku' in ui
+    assert 'Nahrát výseč obrazovky' in ui
+    assert "w.region_btn.clicked.connect(lambda: w.select_record_mode('region'))" in ui
     assert "self.begin_capture(mode='region')" in APP
     assert 'self.region_btn.setEnabled(not self.busy and not self.recording)' in APP
+    assert "self.record_region_action()" in APP
+    assert "self._ui_capture_mode == 'region'" in APP
 
 
 def test_record_region_selects_then_starts_the_same_capture_process():

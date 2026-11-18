@@ -9,7 +9,7 @@ from PySide6.QtCore import Qt, Signal, QRect, QRectF, QPoint, QTimer
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QRadialGradient, QPainter, QPainterPath, QPen, QPixmap, QImage
 from PySide6.QtWidgets import QWidget, QFrame, QPushButton, QLabel, QDialog, QVBoxLayout, QHBoxLayout, QSizePolicy
 
-LIME = '#c4ff28'
+LIME = '#AB65FF'
 TEXT = '#f5f7ff'
 MUTED = '#9ca6be'
 BORDER = 'rgba(204,225,255,0.14)'
@@ -102,7 +102,7 @@ class Stage(QWidget):
         self.pixmap = None
         self.setMinimumSize(370, 230)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.placeholder = QPixmap(str(ASSETS / 'brand.png'))
+        self.placeholder = QPixmap()
 
     def set_frame(self, image: Image.Image | None):
         if image is None:
@@ -121,7 +121,7 @@ class Stage(QWidget):
         path = QPainterPath()
         path.addRoundedRect(r, 21, 21)
         p.setClipPath(path)
-        p.fillRect(self.rect(), QColor('#090d17'))
+        p.fillRect(self.rect(), QColor('#11121F'))
         # fine grid and radial light
         p.setPen(QColor(186, 201, 243, 10))
         for x in range(0, self.width(), 34):
@@ -129,6 +129,10 @@ class Stage(QWidget):
         for y in range(0, self.height(), 34):
             p.drawLine(0, y, self.width(), y)
         logo = self.pixmap if self.pixmap is not None else self.placeholder
+        if logo.isNull():
+            p.setPen(QColor('#938CA9'))
+            p.setFont(QFont('Segoe UI', 13))
+            p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, 'Otevřete GIF a zobrazí se zde jeho náhled')
         if not logo.isNull():
             maxw = self.width() - (38 if self.pixmap else 110)
             maxh = self.height() - (38 if self.pixmap else 30)
@@ -203,7 +207,7 @@ class Timeline(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         p.setPen(Qt.PenStyle.NoPen)
         light = self.theme == 'light'
-        p.setBrush(QColor('#D8E4F4') if light else QColor(8, 13, 26, 180))
+        p.setBrush(QColor('#EEE8F8') if light else QColor(19, 17, 36, 230))
         p.drawRoundedRect(self.rect().adjusted(1,1,-1,-1), 16, 16)
         if not self.project:
             p.setPen(QColor('#415772' if light else MUTED))
@@ -219,7 +223,7 @@ class Timeline(QWidget):
         for j,i in enumerate(indices):
             x = left + j*cellw
             box = QRectF(x+2, 13, max(8,cellw-gap), h)
-            p.setBrush(QColor('#AEBED3' if light else '#263041'))
+            p.setBrush(QColor('#AEBED3' if light else '#322B4B'))
             p.drawRoundedRect(box, 8,8)
             image = self.thumb(i)
             target = image.scaled(int(box.width()), int(box.height()),
@@ -233,9 +237,9 @@ class Timeline(QWidget):
         # range overlay and selection bar
         a = self.x_for(min(self.mark_in,self.mark_out))
         b = self.x_for(max(self.mark_in,self.mark_out))
-        p.setBrush(QColor(196,255,40,53))
+        p.setBrush(QColor(168,91,255,65))
         p.drawRoundedRect(QRectF(a, 102, max(3,b-a), 17), 7,7)
-        for x,c in [(a,QColor('#c4ff28')),(b,QColor('#ff8c9e'))]:
+        for x,c in [(a,QColor('#AB65FF')),(b,QColor('#E9CDFF'))]:
             p.setPen(QPen(c,2))
             p.drawLine(int(x), 97, int(x), 123)
             p.setBrush(c)

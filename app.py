@@ -30,6 +30,7 @@ from recording_flow import fullscreen_region
 from region_selector import RegionSelector
 from editor import GifProject
 from theme import PALETTES, stylesheet, inspector_action_style, inspector_field_style
+from modern_theme import modern_stylesheet
 from recorder import RecorderError, ffmpeg_binary
 from widgets import Aurora, Stage, Timeline, button, pill, tag, ASSETS, LIME, MUTED
 
@@ -82,7 +83,7 @@ class CaptureBar(QWidget):
         self.setFixedWidth(395)
         wrap = QFrame(self)
         wrap.setObjectName('glass')
-        self.setStyleSheet(stylesheet(main.theme))
+        self.setStyleSheet(modern_stylesheet(main.theme))
         lay = QVBoxLayout(self)
         lay.setContentsMargins(5,5,5,5)
         lay.addWidget(wrap)
@@ -113,7 +114,7 @@ class CaptureBar(QWidget):
         self.apply_theme(main.theme)
 
     def apply_theme(self, theme: str):
-        self.setStyleSheet(stylesheet(theme))
+        self.setStyleSheet(modern_stylesheet(theme))
         color = '#795000' if theme == 'light' and self.main._recording_paused else (
             '#A12C48' if theme == 'light' else '#FFD394' if self.main._recording_paused else '#FF697B')
         self.state.setStyleSheet(f'color:{color};font-size:11px;font-weight:800;letter-spacing:1px')
@@ -140,7 +141,7 @@ class CaptureBar(QWidget):
 class GifRipper(QMainWindow):
     def __init__(self, initial: str | None = None):
         super().__init__()
-        self.setWindowTitle('GIFRipper · Record · Slice · Create')
+        self.setWindowTitle('GIFRipper · Nahrávání a střih GIFů')
         self.setWindowIcon(QIcon(str(ASSETS / 'icon.png')))
         self.resize(1320, 840)
         self.setMinimumSize(1040, 720)
@@ -187,6 +188,7 @@ class GifRipper(QMainWindow):
         self._play_timer.timeout.connect(self.next_playback_frame)
         self.worker_thread: QThread | None = None
         self._setup_ui()
+        self.select_record_mode('full')
         self._apply_theme()
         self._shortcuts()
         self.update_project_ui()
@@ -194,304 +196,49 @@ class GifRipper(QMainWindow):
             QTimer.singleShot(250, lambda: self.open_file(initial))
 
     def _setup_ui(self):
-        body = Aurora(self)
-        self.setCentralWidget(body)
-        root = QVBoxLayout(body)
-        root.setContentsMargins(25,16,25,16)
-        root.setSpacing(15)
-        # Brand + actions
-        header = QHBoxLayout()
-        header.setSpacing(14)
-        icon = QLabel()
-        icon.setFixedSize(66,66)
-        icon.setPixmap(QIcon(str(ASSETS/'icon.png')).pixmap(QSize(64,64)))
-        header.addWidget(icon)
-        branding = QVBoxLayout()
-        branding.setSpacing(2)
-        self.brand_name = QLabel('GIFRipper')
-        name = self.brand_name
-        name.setStyleSheet('font-size:26px; font-weight:900; background:transparent;')
-        subtitle = QLabel('CAPTURE  /  FRAME EDITOR  /  EXPORT')
-        subtitle.setObjectName('subtitle')
-        branding.addWidget(name)
-        branding.addWidget(subtitle)
-        header.addLayout(branding)
-        header.addStretch()
-        self.open_btn = button('↗  Otevřít GIF',size=42)
-        self.rec_btn = button('●  Nahrát celou obrazovku', 'danger',size=42)
-        self.region_btn = None
-        # Windows offers two explicit routes. Other systems retain their
-        # working fullscreen capture path (GNOME Wayland is unchanged).
-        if sys.platform == 'win32':
-            self.region_btn = button('▣  Nahrát výseč obrazovky', size=42)
-            self.region_btn.setToolTip('Tažením myši vyber oblast. Při puštění začne odpočet.')
-        self.save_btn = button('↓  Export GIF', 'accent',size=42)
-        header.addWidget(self.open_btn)
-        header.addWidget(self.rec_btn)
-        if self.region_btn:
-            header.addWidget(self.region_btn)
-        header.addWidget(self.save_btn)
-        self.open_btn.clicked.connect(self.open_dialog)
-        self.rec_btn.clicked.connect(self.record_action)
-        if self.region_btn:
-            self.region_btn.clicked.connect(self.record_region_action)
-        self.save_btn.clicked.connect(self.export_dialog)
-        root.addLayout(header)
-
-        # Always-visible state during capture: never leave users wondering
-        # whether recording actually started or whether Qt is still waiting.
-        self.capture_banner = QFrame()
-        self.capture_banner.setObjectName('captureBanner')
-        banner_row = QHBoxLayout(self.capture_banner)
-        banner_row.setContentsMargins(15, 10, 15, 10)
-        self.capture_banner_text = QLabel('Připravuji záznam…')
-        self.capture_banner_text.setObjectName('bannerText')
-        self.capture_banner_text.setWordWrap(True)
-        banner_row.addWidget(self.capture_banner_text, 1)
-        self.capture_banner_hide = button('×  Zrušit', 'ghost')
-        self.capture_banner_hide.clicked.connect(self.record_action)
-        banner_row.addWidget(self.capture_banner_hide)
-        self.capture_banner.hide()
-        root.addWidget(self.capture_banner)
-
-        content = QHBoxLayout()
-        content.setSpacing(15)
-        preview_card = card()
-        drop_shadow(preview_card)
-        preview_layout = QVBoxLayout(preview_card)
-        preview_layout.setContentsMargins(18,15,18,15)
-        preview_layout.setSpacing(10)
-        title_row = QHBoxLayout()
-        title_row.addWidget(tag('◈  PŘEHRÁVAČ  /  PREVIEW'))
-        title_row.addStretch()
-        self.file_label = pill('Bez souboru')
-        title_row.addWidget(self.file_label)
-        preview_layout.addLayout(title_row)
-        self.stage = Stage()
-        preview_layout.addWidget(self.stage,1)
-        control = QHBoxLayout()
-        control.setSpacing(7)
-        self.first_btn = button('Ⅰ◀','neutral',38)
-        self.prev_btn = button('◀','neutral',38)
-        self.play_btn = button('▶  Přehrát','accent',38)
-        self.stop_btn = button('■','neutral',38)
-        self.next_btn = button('▶Ⅰ','neutral',38)
-        self.last_btn = button('▶ⅠⅠ','neutral',38)
-        self.first_btn.clicked.connect(lambda:self.seek(0))
-        self.prev_btn.clicked.connect(lambda:self.seek(self.index-1))
-        self.play_btn.clicked.connect(self.toggle_play)
-        self.stop_btn.clicked.connect(self.stop_playback)
-        self.next_btn.clicked.connect(lambda:self.seek(self.index+1))
-        self.last_btn.clicked.connect(lambda:self.seek(self.project.count-1 if self.project else 0))
-        for w in [self.first_btn,self.prev_btn,self.play_btn,self.stop_btn,self.next_btn,self.last_btn]:
-            control.addWidget(w)
-        control.addStretch()
-        self.time_label = QLabel('00:00.000 / 00:00.000')
-        self.time_label.setObjectName('timeText')
-        control.addWidget(self.time_label)
-        preview_layout.addLayout(control)
-        content.addWidget(preview_card,1)
-
-        inspector = card()
-        inspector.setFixedWidth(332)
-        drop_shadow(inspector)
-        inspector_l = QVBoxLayout(inspector)
-        inspector_l.setContentsMargins(16,17,16,15)
-        inspector_l.setSpacing(12)
-        inspector_l.addWidget(tag('✂  STŘIH  /  EDITOR'))
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        section = QWidget()
-        section.setObjectName("inspectorContent")
-        section.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.inspector_section = section
-        self.inspector_scroll = scroll
-        section.setAutoFillBackground(True)
-        scroll.viewport().setAutoFillBackground(True)
-        sc = QVBoxLayout(section)
-        # Gutter keeps range fields away from the clipped scroll viewport and scroll bar.
-        sc.setContentsMargins(11, 10, 15, 8)
-        sc.setSpacing(12)
-
-        caps = pill('VÝBĚR ÚSEKU  ·  včetně krajních snímků')
-        sc.addWidget(caps)
-        line = QHBoxLayout()
-        line.setSpacing(12)
-        line.setContentsMargins(2, 7, 2, 6)
-        one = QVBoxLayout()
-        one.setSpacing(8)
-        one.addWidget(tag('ZAČÁTEK  /  OD', '#c4ff28',9))
-        self.in_spin = QSpinBox()
-        self.in_spin.setMinimum(1)
-        one.addWidget(self.in_spin)
-        line.addLayout(one)
-        two = QVBoxLayout()
-        two.setSpacing(8)
-        two.addWidget(tag('KONEC  /  DO', '#ffb0c1',9))
-        self.out_spin = QSpinBox()
-        self.out_spin.setMinimum(1)
-        two.addWidget(self.out_spin)
-        line.addLayout(two)
-        sc.addLayout(line)
-        self.in_spin.valueChanged.connect(lambda v:self.update_marks(v-1,self.mark_out))
-        self.out_spin.valueChanged.connect(lambda v:self.update_marks(self.mark_in,v-1))
-        buttons = QHBoxLayout()
-        self.mark_in_btn = button('↤  Nastavit OD')
-        self.mark_out_btn = button('Nastavit DO  ↦')
-        self.mark_in_btn.setObjectName('inspectorAction')
-        self.mark_out_btn.setObjectName('inspectorAction')
-        self.mark_in_btn.setMinimumHeight(43)
-        self.mark_out_btn.setMinimumHeight(43)
-        self.mark_in_btn.clicked.connect(lambda: self.update_marks(self.index,self.mark_out))
-        self.mark_out_btn.clicked.connect(lambda: self.update_marks(self.mark_in,self.index))
-        buttons.addWidget(self.mark_in_btn)
-        buttons.addWidget(self.mark_out_btn)
-        sc.addLayout(buttons)
-        self.cut_btn = button('✂  VYSTŘIHNOUT ÚSEK','danger',45)
-        self.cut_btn.setObjectName('inspectorDanger')
-        self.cut_btn.clicked.connect(self.cut_range)
-        sc.addWidget(self.cut_btn)
-        sc.addSpacing(7)
-        sc.addWidget(tag('RYCHLÝ STŘIH'))
-        self.trim_before = button('↤  Odstranit vše před snímkem')
-        self.trim_after = button('Odstranit vše za snímkem  ↦')
-        self.trim_before.setObjectName('inspectorAction')
-        self.trim_after.setObjectName('inspectorAction')
-        self.trim_before.setMinimumHeight(44)
-        self.trim_after.setMinimumHeight(44)
-        self.trim_before.clicked.connect(self.cut_before)
-        self.trim_after.clicked.connect(self.cut_after)
-        sc.addWidget(self.trim_before)
-        sc.addWidget(self.trim_after)
-        sc.addSpacing(7)
-        sc.addWidget(tag('HISTORIE'))
-        undo_row = QHBoxLayout()
-        self.undo_btn = button('↶  Zpět')
-        self.redo_btn = button('↷  Znovu')
-        self.undo_btn.setObjectName('inspectorAction')
-        self.redo_btn.setObjectName('inspectorAction')
-        self.undo_btn.setMinimumHeight(43)
-        self.redo_btn.setMinimumHeight(43)
-        self.undo_btn.clicked.connect(self.undo)
-        self.redo_btn.clicked.connect(self.redo)
-        undo_row.addWidget(self.undo_btn)
-        undo_row.addWidget(self.redo_btn)
-        sc.addLayout(undo_row)
-        self.reset_btn = button('⟳  Obnovit originál','ghost')
-        self.reset_btn.setObjectName('inspectorGhost')
-        self.reset_btn.setMinimumHeight(43)
-        self.reset_btn.clicked.connect(self.reset)
-        sc.addWidget(self.reset_btn)
-        sc.addSpacing(8)
-        sc.addWidget(tag('NAHRÁVÁNÍ'))
-        opts = QHBoxLayout()
-        opts.setSpacing(10)
-        opts.setContentsMargins(2, 3, 2, 4)
-        fps_label = QLabel('Snímková frekvence')
-        fps_label.setObjectName('fpsLabel')
-        opts.addWidget(fps_label)
-        opts.addStretch()
-        self.fps_spin = QSpinBox()
-        self.fps_spin.setObjectName('fpsControl')
-        self.fps_spin.setToolTip('Počet snímků za sekundu ve výsledném GIFu (1–30 FPS)')
-        self.fps_spin.setRange(1,30)
-        self.fps_spin.setValue(12)
-        self.fps_spin.setSuffix(' FPS')
-        self.fps_spin.setMinimumWidth(112)
-        self.fps_spin.setMinimumHeight(40)
-        self.fps_spin.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        opts.addWidget(self.fps_spin)
-        sc.addLayout(opts)
-        sc.addStretch()
-        scroll.setWidget(section)
-        inspector_l.addWidget(scroll,1)
-        content.addWidget(inspector)
-        root.addLayout(content,1)
-
-        timeline_card = card()
-        drop_shadow(timeline_card)
-        tl = QVBoxLayout(timeline_card)
-        tl.setContentsMargins(15,13,15,13)
-        tl.setSpacing(7)
-        tl_head = QHBoxLayout()
-        tl_head.addWidget(tag('▤  ČASOVÁ OSA  /  FRAMES'))
-        tl_head.addStretch()
-        self.frame_count_label = pill('0 SNÍMKŮ')
-        tl_head.addWidget(self.frame_count_label)
-        tl.addLayout(tl_head)
-        self.timeline = Timeline()
-        self.timeline.setMinimumHeight(115)
-        self.timeline.seek.connect(self.seek)
-        self.timeline.set_in.connect(lambda i: self.update_marks(i,self.mark_out))
-        self.timeline.set_out.connect(lambda i: self.update_marks(self.mark_in,i))
-        tl.addWidget(self.timeline)
-        root.addWidget(timeline_card)
-        status = QHBoxLayout()
-        self.status = QLabel('●  Připraveno. Otevři GIF nebo spusť nahrávání.')
-        self.status.setObjectName('statusText')
-        status.addWidget(self.status)
-        status.addStretch()
-        status.addWidget(tag('GIFRIPPER 3.1  •   CROSS-PLATFORM', '#66738b',9))
-        status.addSpacing(12)
-        # Appearance is a secondary preference, deliberately kept away from
-        # Open / Record / Export in the primary toolbar.
-        self.theme_btn = button('☀  Světlý režim', size=33)
-        self.theme_btn.setObjectName('themeToggle')
-        self.theme_btn.setToolTip('Vzhled aplikace – světlý / tmavý motiv (Ctrl+L)')
-        self.theme_btn.clicked.connect(self.toggle_theme)
-        self.theme_btn.setMinimumWidth(126)
-        status.addWidget(self.theme_btn)
-        root.addLayout(status)
-        self.setStyleSheet(stylesheet(self.theme))
+        from modern_ui import setup_modern_ui
+        self._ui_capture_mode = 'full'
+        setup_modern_ui(self)
 
     def _apply_theme(self):
-        # Apply app-wide theme without touching the recording or project state.
-        c = PALETTES[self.theme]
-        self.setStyleSheet(stylesheet(self.theme))
-        self.brand_name.setText(
-            f'<span style="color:{c["logo"]}">GIF</span>'
-            f'<span style="color:{c["logo_green"]}">Ripper</span>')
-        self.theme_btn.setText('☾  Tmavý režim' if self.theme == 'light' else '☀  Světlý režim')
-        self.centralWidget().set_theme(self.theme)
-        self.timeline.set_theme(self.theme)
-        # Qt's scroll viewport otherwise inherits the host OS background (e.g.
-        # gray on GNOME), regardless of parent Qt stylesheet.
-        bg = QColor(c['bg'])
-        self.inspector_section.setStyleSheet(
-            f'QWidget#inspectorContent {{background:{c["bg"]}; border:none;}}')
-        self.inspector_section.setAutoFillBackground(True)
-        section_pal = self.inspector_section.palette()
-        section_pal.setColor(self.inspector_section.backgroundRole(), bg)
-        self.inspector_section.setPalette(section_pal)
-        viewport = self.inspector_scroll.viewport()
-        viewport.setStyleSheet(f'background:{c["bg"]}; border:none;')
-        viewport.setAutoFillBackground(True)
-        viewport_pal = viewport.palette()
-        viewport_pal.setColor(viewport.backgroundRole(), bg)
-        viewport.setPalette(viewport_pal)
-        # Local control styles are deliberate: on some Wayland GNOME themes,
-        # QScrollArea children lose the app-wide QPushButton background/border.
-        # Assigning these after the viewport stylesheet makes the borders
-        # deterministic instead of rendering the actions as naked text.
-        for control, role in (
-            (self.mark_in_btn, 'mark_in'),
-            (self.mark_out_btn, 'mark_out'),
-            (self.cut_btn, 'cut'),
-            (self.trim_before, 'trim'),
-            (self.trim_after, 'trim'),
-            (self.undo_btn, 'history'),
-            (self.redo_btn, 'history'),
-            (self.reset_btn, 'reset'),
-        ):
-            control.setStyleSheet(inspector_action_style(self.theme, role))
-        self.in_spin.setStyleSheet(inspector_field_style(self.theme, 'mark_in'))
-        self.out_spin.setStyleSheet(inspector_field_style(self.theme, 'mark_out'))
-        self.fps_spin.setStyleSheet(inspector_field_style(self.theme, 'fps'))
-        if self.capture_bar is not None:
-            self.capture_bar.apply_theme(self.theme)
-        self.update()
+        from modern_ui import apply_modern_theme
+        apply_modern_theme(self)
+
+    def show_page(self, page: int):
+        if not hasattr(self, 'pages'):
+            return
+        self.pages.setCurrentIndex(page)
+        for ix, btn in enumerate(self.nav_buttons):
+            btn.setChecked(ix == page)
+
+    def show_inspector_tab(self, tab: int):
+        self.inspector_pages.setCurrentIndex(tab)
+        for ix, btn in enumerate(self.inspector_tabs):
+            btn.setChecked(ix == tab)
+
+    def select_record_mode(self, mode: str):
+        if mode == 'region' and sys.platform != 'win32':
+            return
+        self._ui_capture_mode = mode
+        self.full_option.setChecked(mode == 'full')
+        if self.region_btn and sys.platform == 'win32':
+            self.region_btn.setChecked(mode == 'region')
+        self.rec_btn.setText('◉  Spustit nahrávání')
+
+    def start_selected_recording(self):
+        if self.recording:
+            self.record_action()
+        elif self._ui_capture_mode == 'region' and sys.platform == 'win32':
+            self.record_region_action()
+        else:
+            self.record_action()
+
+    def open_recent_gif(self):
+        recent = self.settings.value('library/last_opened', '')
+        if recent and Path(str(recent)).is_file():
+            self.open_file(str(recent))
+        else:
+            self.open_dialog()
 
     def toggle_theme(self):
         self.theme = 'light' if self.theme == 'dark' else 'dark'
@@ -540,9 +287,11 @@ class GifRipper(QMainWindow):
                                 (not self.busy and (not self.recording or not self._agent_recording)))
         self.rec_btn.setText('×  Zrušit dokončení' if self.finishing_capture else
                              '×  Zrušit čekání' if self.recording and not self._agent_recording else
-                             '●  Nahrát celou obrazovku')
-        if self.region_btn:
+                             '◉  Spustit nahrávání')
+        if self.region_btn and sys.platform == 'win32':
             self.region_btn.setEnabled(not self.busy and not self.recording)
+        self.full_option.setEnabled(not self.busy and not self.recording)
+        self.undo_top_btn.setEnabled(loaded and p.can_undo and not self.busy)
         self.open_btn.setEnabled(not self.busy and not self.recording)
         if loaded:
             self.file_label.setText(p.path.name[:32])
@@ -587,6 +336,10 @@ class GifRipper(QMainWindow):
         self.mark_out = self.project.count-1
         self.timeline.set_project(self.project)
         self.seek(0)
+        self.settings.setValue('library/last_opened', str(Path(file).resolve()))
+        self.library_item.setText('↗  ' + Path(file).name)
+        self.library_item.setEnabled(True)
+        self.show_page(1)
         self.announce(f'Otevřeno: {Path(file).name} · {self.project.count} snímků')
 
     def seek(self,index:int):

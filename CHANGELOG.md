@@ -1,3 +1,14 @@
+## 3.2 – Nové fialové rozhraní (frontend only)
+
+- Nové navigační menu: Nahrávání, Upravit GIF, Moje GIFy, Nastavení.
+- Velké volby nahrávání a centrální tlačítko start podle referenčního návrhu.
+- Střihová obrazovka s velkým náhledem, záložkami nástrojů a časovou osou.
+- Tmavý/fialový a odpovídající světlý vzhled, nová fialová ikona.
+- Automatické přepnutí na stránku editoru po otevření/nahrání GIFu.
+- Přidané testy layoutu a kontroly otisků osmi backendových souborů.
+- Bez úprav `capture_agent.py`, `capture_ipc.py`, `gnome_wayland.py`,
+  `recording_flow.py`, `region_selector.py`, `recorder.py`, `editor.py`, `x11_capture.py`.
+
 # GIFRipper 3.1 — živý průhledný výběr výseče Windows
 
 - Oprava šedého pozadí: Windows výběr už nevykresluje uložený snímek z Qt ScreenCapture, který může být šedý nebo zastaralý. Místo toho používá skutečně průhledné bezrámečkové okno s `WA_TranslucentBackground` a `WA_NoSystemBackground`.
