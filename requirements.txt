@@ -1,0 +1,4 @@
+# Qt 6.8 introduced native Wayland ScreenCast via XDG Desktop Portal / PipeWire.
+PySide6>=6.8.3,<7
+Pillow>=10,<13
+dbus-next>=0.2.3,<1
