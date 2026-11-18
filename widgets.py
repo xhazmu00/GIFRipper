@@ -148,7 +148,12 @@ class Stage(QWidget):
 
 
 class Timeline(QWidget):
-    """Virtualized visual timeline: only visible sampled thumbnails are drawn."""
+    """GIF frame timeline with two draggable *boundary* handles.
+
+    The handles enclose inclusive frame indices. Display coordinates are
+    proportional to frame count in Frames mode and to true GIF durations
+    in Time mode; mouse hit-testing uses precisely the same mapping.
+    """
     seek = Signal(int)
     set_in = Signal(int)
     set_out = Signal(int)
@@ -157,21 +162,28 @@ class Timeline(QWidget):
         super().__init__()
         self.project = None
         self.theme = 'dark'
-        self.current = 0
-        self.mark_in = 0
-        self.mark_out = 0
-        self.setMinimumHeight(132)
+        self.unit = 'frames'
+        self.current = self.mark_in = self.mark_out = 0
+        self.setMinimumHeight(155)
         self.setMouseTracking(True)
         self._cache = {}
+        self._drag_handle = None
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip('Tažením levého a pravého úchytu vyberte úsek; kliknutím jinde posunete přehrávání.')
 
     def set_theme(self, theme: str):
         self.theme = theme
         self.update()
 
+    def set_unit(self, unit: str):
+        if unit in ('frames', 'time'):
+            self.unit = unit
+            self.update()
+
     def set_project(self, project):
         self.project = project
         self._cache.clear()
+        self._drag_handle = None
         self.current = self.mark_in = self.mark_out = 0
         self.update()
 
@@ -179,104 +191,193 @@ class Timeline(QWidget):
         self.current, self.mark_in, self.mark_out = current, mark_in, mark_out
         self.update()
 
-    def x_for(self, i: int) -> float:
-        if not self.project or self.project.count <= 1:
+    def _fraction(self, x: float) -> float:
+        return max(0.0, min(1.0, (x - 22) / max(1, self.width() - 44)))
+
+    def x_for_boundary(self, boundary: int) -> float:
+        if not self.project:
             return 22.0
-        return 22 + i/(self.project.count-1)*max(1,self.width()-44)
+        from trim_logic import boundary_fraction
+        return 22 + boundary_fraction(self.project.prefix_ms, boundary, self.unit) * max(1, self.width() - 44)
+
+    def x_for(self, index: int) -> float:
+        """Start of a displayed frame (also used by the playhead)."""
+        return self.x_for_boundary(index)
 
     def frame_at(self, x: float) -> int:
         if not self.project:
             return 0
-        pct = max(0, min(1, (x-22)/max(1,self.width()-44)))
-        return round(pct * (self.project.count-1))
+        from trim_logic import frame_at_fraction
+        return frame_at_fraction(self.project.prefix_ms, self._fraction(x), self.unit)
 
-    def thumb(self, i):
-        if i not in self._cache:
-            im = self.project.image(i).copy()
+    def frame_for_handle(self, x: float, handle: str) -> int:
+        from trim_logic import nearest_boundary
+        if not self.project:
+            return 0
+        boundary = nearest_boundary(self.project.prefix_ms, self._fraction(x), self.unit)
+        if handle == 'in':
+            return min(self.project.count - 1, boundary)
+        return max(0, boundary - 1)
+
+    def thumb(self, index):
+        if index not in self._cache:
+            im = self.project.image(index).copy()
             im.thumbnail((152, 78), Image.Resampling.LANCZOS)
             rgba = im.convert('RGBA')
             qi = QImage(rgba.tobytes(), rgba.width, rgba.height,
-                        rgba.width*4, QImage.Format.Format_RGBA8888).copy()
-            self._cache[i] = QPixmap.fromImage(qi)
+                        rgba.width * 4, QImage.Format.Format_RGBA8888).copy()
+            self._cache[index] = QPixmap.fromImage(qi)
             if len(self._cache) > 80:
                 self._cache.pop(next(iter(self._cache)))
-        return self._cache[i]
+        return self._cache[index]
+
+    def _selected_bounds(self):
+        return self.x_for_boundary(self.mark_in), self.x_for_boundary(self.mark_out + 1)
+
+    def _handle_at(self, x: float, y: float):
+        if not self.project or not (16 <= y <= 116):
+            return None
+        a, b = self._selected_bounds()
+        near_a = abs(x - a) <= 16
+        near_b = abs(x - b) <= 16
+        if near_a and near_b:
+            return 'in' if abs(x - a) <= abs(x - b) else 'out'
+        return 'in' if near_a else 'out' if near_b else None
 
     def paintEvent(self, _):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        p.setPen(Qt.PenStyle.NoPen)
         light = self.theme == 'light'
-        p.setBrush(QColor('#EEE8F8') if light else QColor(19, 17, 36, 230))
-        p.drawRoundedRect(self.rect().adjusted(1,1,-1,-1), 16, 16)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor('#EEE8F8') if light else QColor('#151323'))
+        p.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 15, 15)
         if not self.project:
             p.setPen(QColor('#415772' if light else MUTED))
-            p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, 'Otevři GIF a objeví se snímky na časové ose')
+            p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter,
+                       'Otevřete GIF: táhněte levý nebo pravý fialový úchyt pro výběr úseku')
+            p.end()
             return
+        from trim_logic import format_timestamp
         n = self.project.count
-        left, right = 22, self.width()-22
-        gap = 7
-        h = 64
-        slots = max(1, (right-left)//98)
-        indices = sorted(set(round(i*(n-1)/max(1,slots-1)) for i in range(slots)))
-        cellw = max(1, (right-left)/max(1,len(indices)))
-        for j,i in enumerate(indices):
-            x = left + j*cellw
-            box = QRectF(x+2, 13, max(8,cellw-gap), h)
-            p.setBrush(QColor('#AEBED3' if light else '#322B4B'))
-            p.drawRoundedRect(box, 8,8)
-            image = self.thumb(i)
-            target = image.scaled(int(box.width()), int(box.height()),
+        left, right = 22, self.width() - 22
+        width = max(1, right - left)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor('#DCD5EB') if light else QColor('#24203B'))
+        p.drawRoundedRect(QRectF(left, 20, width, 84), 10, 10)
+        # Each thumbnail depicts the frame visible at its timeline position.
+        # In Time mode a long frame may occupy multiple slots; that's correct.
+        from trim_logic import frame_at_fraction
+        slot_count = max(1, int(width // 106))
+        cell_width = width / slot_count
+        for slot in range(slot_count):
+            index = frame_at_fraction(self.project.prefix_ms,
+                                      (slot + 0.5) / slot_count, self.unit)
+            bx = left + cell_width * slot
+            box = QRectF(bx + 2, 23, max(5, cell_width - 5), 78)
+            p.setBrush(QColor('#BBB3CE' if light else '#39304E'))
+            p.drawRoundedRect(box, 5, 5)
+            frame = self.thumb(index)
+            scaled = frame.scaled(int(box.width()), int(box.height()),
                                   Qt.AspectRatioMode.KeepAspectRatio,
                                   Qt.TransformationMode.SmoothTransformation)
-            p.drawPixmap(int(box.center().x()-target.width()/2), int(box.center().y()-target.height()/2),target)
-            p.setPen(QColor('#425874' if light else '#A3B0C8'))
-            p.setFont(QFont('Inter', 8))
-            p.drawText(int(x+3), 91, f'{i+1}')
-            p.setPen(Qt.PenStyle.NoPen)
-        # range overlay and selection bar
-        a = self.x_for(min(self.mark_in,self.mark_out))
-        b = self.x_for(max(self.mark_in,self.mark_out))
-        p.setBrush(QColor(168,91,255,65))
-        p.drawRoundedRect(QRectF(a, 102, max(3,b-a), 17), 7,7)
-        for x,c in [(a,QColor('#AB65FF')),(b,QColor('#E9CDFF'))]:
-            p.setPen(QPen(c,2))
-            p.drawLine(int(x), 97, int(x), 123)
-            p.setBrush(c)
-            p.drawEllipse(QRectF(x-4, 95, 8, 8))
-        x = self.x_for(self.current)
-        p.setPen(QPen(QColor('#152D49' if light else '#fafcff'), 2))
-        p.drawLine(int(x), 5, int(x), 127)
-        p.setBrush(QColor('#152D49' if light else '#f8fbff'))
+            p.drawPixmap(int(box.center().x() - scaled.width() / 2),
+                         int(box.center().y() - scaled.height() / 2), scaled)
+        a, b = self._selected_bounds()
+        # A selected one-frame interval has nonzero width in both modes.
+        p.fillRect(QRectF(left, 20, max(0, a - left), 84), QColor(5, 5, 18, 105))
+        p.fillRect(QRectF(b, 20, max(0, right - b), 84), QColor(5, 5, 18, 105))
+        p.fillRect(QRectF(a, 20, max(1, b - a), 84), QColor(154, 79, 245, 52))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.setPen(QPen(QColor('#AB65FF'), 2))
+        p.drawRect(QRectF(a, 19, max(1, b - a), 86))
+        # The seek/playhead marker is independent of the range handles.
+        play_x = self.x_for_boundary(self.current)
+        p.setPen(QPen(QColor('#192438' if light else '#FFFFFF'), 2))
+        p.drawLine(int(play_x), 12, int(play_x), 112)
         p.setPen(Qt.PenStyle.NoPen)
-        pointer = QPainterPath()
-        pointer.moveTo(x-6,5)
-        pointer.lineTo(x+6,5)
-        pointer.lineTo(x,13)
-        pointer.closeSubpath()
-        p.drawPath(pointer)
+        p.setBrush(QColor('#16213B' if light else '#FFFFFF'))
+        triangle = QPainterPath()
+        triangle.moveTo(play_x - 6, 10)
+        triangle.lineTo(play_x + 6, 10)
+        triangle.lineTo(play_x, 18)
+        triangle.closeSubpath()
+        p.drawPath(triangle)
+        # Draw paddles LAST so the white playhead never obscures their grips.
+        for x, side in ((a, 'in'), (b, 'out')):
+            is_dragging = self._drag_handle == side
+            paddle = QRectF(x - 10, 17, 20, 91)
+            p.setPen(QPen(QColor('#A85BFF'), 2))
+            p.setBrush(QColor('#C99DFD' if is_dragging else '#F8F0FF'))
+            p.drawRoundedRect(paddle, 7, 7)
+            p.setPen(QPen(QColor('#7C36D3'), 2, Qt.PenStyle.SolidLine,
+                          Qt.PenCapStyle.RoundCap))
+            for dx in (-2, 2):
+                p.drawLine(int(x + dx), 51, int(x + dx), 75)
+        # Accurate ruler: seconds in Time mode, 1-based frame numbers otherwise.
+        p.setFont(QFont('Segoe UI', 9, QFont.Weight.Medium))
+        p.setPen(QColor('#57446A' if light else '#C8BADD'))
+        if self.unit == 'time':
+            begin = format_timestamp(self.project.prefix_ms[self.mark_in])
+            end = format_timestamp(self.project.prefix_ms[self.mark_out + 1])
+        else:
+            begin, end = f'{self.mark_in + 1}', f'{self.mark_out + 1}'
+        summary = f'OD {begin}     →     DO {end}'
+        p.drawText(QRectF(left + 2, 112, width - 4, 18), Qt.AlignmentFlag.AlignCenter, summary)
+        if self.unit == 'time':
+            left_tick, right_tick = '00:00.000', format_timestamp(self.project.total_ms)
+        else:
+            left_tick, right_tick = '1', str(n)
+        p.setFont(QFont('Segoe UI', 8))
+        p.setPen(QColor('#695A7E' if light else '#9387AA'))
+        p.drawText(QRectF(left, 133, width / 2, 19), Qt.AlignmentFlag.AlignLeft, left_tick)
+        p.drawText(QRectF(left + width / 2, 133, width / 2, 19), Qt.AlignmentFlag.AlignRight, right_tick)
         p.end()
 
     def mousePressEvent(self, ev):
-        if not self.project:
+        if not self.project or ev.button() != Qt.MouseButton.LeftButton:
             return
-        i = self.frame_at(ev.position().x())
-        if ev.modifiers() & Qt.KeyboardModifier.ShiftModifier:
-            self.set_in.emit(i)
+        x, y = ev.position().x(), ev.position().y()
+        self._drag_handle = self._handle_at(x, y)
+        if self._drag_handle:
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+            self._move_handle(x)
+        elif ev.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+            self.set_in.emit(self.frame_at(x))
         elif ev.modifiers() & Qt.KeyboardModifier.AltModifier:
-            self.set_out.emit(i)
+            self.set_out.emit(self.frame_at(x))
         else:
-            self.seek.emit(i)
+            self.seek.emit(self.frame_at(x))
+        self.update()
+
+    def _move_handle(self, x: float):
+        if self._drag_handle == 'in':
+            self.set_in.emit(min(self.frame_for_handle(x, 'in'), self.mark_out))
+        elif self._drag_handle == 'out':
+            self.set_out.emit(max(self.frame_for_handle(x, 'out'), self.mark_in))
 
     def mouseMoveEvent(self, ev):
-        if self.project and ev.buttons() & Qt.MouseButton.LeftButton:
-            i = self.frame_at(ev.position().x())
+        if not self.project:
+            return
+        x, y = ev.position().x(), ev.position().y()
+        if self._drag_handle and ev.buttons() & Qt.MouseButton.LeftButton:
+            self._move_handle(x)
+        elif ev.buttons() & Qt.MouseButton.LeftButton:
             if ev.modifiers() & Qt.KeyboardModifier.ShiftModifier:
-                self.set_in.emit(i)
+                self.set_in.emit(self.frame_at(x))
             elif ev.modifiers() & Qt.KeyboardModifier.AltModifier:
-                self.set_out.emit(i)
+                self.set_out.emit(self.frame_at(x))
             else:
-                self.seek.emit(i)
+                self.seek.emit(self.frame_at(x))
+        else:
+            self.setCursor(Qt.CursorShape.SizeHorCursor if self._handle_at(x, y)
+                           else Qt.CursorShape.PointingHandCursor)
+
+    def mouseReleaseEvent(self, ev):
+        if self._drag_handle and ev.button() == Qt.MouseButton.LeftButton:
+            self._move_handle(ev.position().x())
+            self._drag_handle = None
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.update()
 
 
 class RegionCanvas(QWidget):

@@ -80,10 +80,18 @@ QPushButton#tab:hover {background:%(hover)s;}
 QPushButton#danger {background:#4C243C; border:1px solid #E36AA1; color:#FFDBED; font-weight:700;}
 QPushButton#danger:hover {background:#6B2B4E;}
 QPushButton#themeToggle {padding:7px 13px; font-size:12px;}
-QSpinBox, QComboBox {background:%(input)s; border:1px solid %(border)s; border-radius:11px;
+QPushButton#unitToggle {background:%(input)s; border:1px solid %(border)s;
+ border-radius:9px; padding:6px 9px; font-size:12px; font-weight:750; color:%(sub)s;}
+QPushButton#unitToggle:hover {border-color:%(accent)s; color:%(text)s;}
+QPushButton#unitToggle:checked {background:%(surface3)s; color:%(accent)s;
+ border:2px solid %(accent)s;}
+QLabel#selectionSummary {background:%(surface3)s; border:1px solid %(border)s;
+ border-radius:8px; padding:8px 10px; color:%(text)s; font-size:11px; font-weight:750;}
+QLabel#hint {font-size:11px; color:%(muted)s; line-height:1.25;}
+QSpinBox, QTimeEdit, QComboBox {background:%(input)s; border:1px solid %(border)s; border-radius:11px;
  padding:8px 10px; font-size:13px; color:%(text)s; min-height:28px;}
-QSpinBox:hover, QComboBox:hover {border:1px solid %(accent)s;}
-QSpinBox::up-button, QSpinBox::down-button {width:17px; border:none; background:transparent;}
+QSpinBox:hover, QTimeEdit:hover, QComboBox:hover {border:1px solid %(accent)s;}
+QSpinBox::up-button, QSpinBox::down-button, QTimeEdit::up-button, QTimeEdit::down-button {width:17px; border:none; background:transparent;}
 QScrollArea, QScrollArea>QWidget>QWidget {background:transparent; border:none;}
 QWidget#inspectorContent {background:transparent; border:none;}
 QFrame#captureBanner {background:%(surface3)s; border:1px solid %(accent)s; border-radius:13px;}

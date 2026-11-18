@@ -1,3 +1,38 @@
+# GIFRipper 3.3 — tažné úchyty a přepínání Čas / Snímky
+
+**Stavíme na ověřené 3.2. Nahrávání na Windows (včetně průhledného výběru)
+a Ubuntu GNOME Wayland zůstává beze změn.**
+
+## Výběr a střih GIFu
+
+1. V sekci **Upravit GIF** otevři nebo nahraj GIF.
+2. Na spodní časové ose **tažením levého a pravého světlého fialového úchytu**
+   vyber úsek; přehrávací kurzor je nezávislý a lze jej dál posunovat kliknutím.
+3. Vyber si **Snímky** (1 až počet snímků) nebo **Čas** (`HH:mm:ss.zzz`).
+   Přepínače jsou v záložce Úsek i nad časovou osou a zůstávají synchronizované.
+   Režim Čas rozkládá náhledy a úchyty podle *skutečného* časování jednotlivých
+   GIF snímků, nikoli odhadu z FPS. Režim Snímky používá rovnoměrné pozice.
+4. Pole **OD / DO** ukazují tutéž vybranou oblast. Čas upravíš a potvrdíš
+   Enterem (nebo odchodem z pole). Čas se přichytí k hranicím celých snímků,
+   neboť GIFRipper pracuje snímek po snímku. OD je začátek prvního snímku,
+   DO je konec posledního snímku. Časové údaje nelze nastavit uvnitř snímku.
+5. Zvol jednu ze dvou operací:
+   - **Odstranit vybraný úsek** — odstraní označené snímky a spojí zbytek.
+   - **Ponechat pouze výběr** — odstraní vše před výběrem a za ním.
+   Obě operace včetně krajních snímků; při výběru celého GIFu nejsou akce
+   aktivní, protože by nebylo co ponechat / odstranit. U neaktivního výběru
+   nejprve posuň některý z úchytů.
+6. Použij **Zpět (Ctrl+Z)** a **Znovu (Ctrl+Y)** podle potřeby a GIF ulož.
+   Ponechání samotného výběru je jediný krok Undo; originální GIF se nemění.
+
+**Změny kódu:** `widgets.py` (časová osa), `modern_ui.py` (přepínače a vstupy),
+`app.py` (propojení), `trim_logic.py` (převody času/snímků), `editor.py`
+(jediná přidaná metoda `keep_range` pro atomický střih) a CSS. Soubory
+nahrávání a výběru oblasti byly zkontrolovány a zůstávají bitově identické
+s verzí 3.2. Testy se spouštějí přes `python -m pytest -q`.
+
+---
+
 # GIFRipper 3.2 — fialové rozhraní podle vizuálního návrhu č. 2
 
 **Vizuální aktualizace oproti 3.1.** Změnil se pouze frontend aplikace (příslušné části `app.py`, `modern_ui.py`, `modern_theme.py`, `widgets.py` a ikony). Všechny soubory pro zachytávání, výběr oblasti, střih a export jsou oproti 3.1 beze změny. Nové rozmístění i světelný/tmavý motiv byly inspirovány uživatelem dodanými referenčními obrázky.

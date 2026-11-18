@@ -1,3 +1,18 @@
+## 3.3 – střih pomocí tažných úchytů, Čas / Snímky
+
+- Dvě skutečně tažná „pádla“ na časové ose, automatické změny OD/DO při tažení.
+- Dvě nezávislé operace: odstranit označené snímky, nebo ponechat pouze výběr.
+- Nová atomická editovací operace `GifProject.keep_range()` s jediným Undo/Redo.
+- Přepínač Snímky / Čas přímo v inspektoru i časové ose; pole a vizualizace se
+  aktualizují společně, bez ztráty výběru.
+- Režim času používá původní individuální zpoždění GIF snímků a zobrazuje
+  čas začátku a konce úseku. Hodnoty se zarovnávají na hranice snímků.
+- Hodnoty času se potvrzují Enterem/opustěním vstupu, aby šly pohodlně napsat.
+- Nahrávací a regionové backendy (Windows, GNOME Wayland, X11, IPC, FFmpeg)
+  jsou shodné se stabilní verzí 3.2.
+- Nové testy správného střihu včetně Undo/Redo, časových hranic, exportu,
+  režimů osy a volitelného Qt GUI smoke testu.
+
 ## 3.2 – Nové fialové rozhraní (frontend only)
 
 - Nové navigační menu: Nahrávání, Upravit GIF, Moje GIFy, Nastavení.

@@ -18,7 +18,7 @@ os.environ.setdefault('QT_MEDIA_BACKEND', 'ffmpeg')
 if sys.platform.startswith('linux') and os.environ.get('XDG_SESSION_TYPE','').lower() == 'wayland':
     os.environ.setdefault('QT_QPA_PLATFORM', 'wayland;xcb')
 
-from PySide6.QtCore import Qt, QObject, Signal, Slot, QThread, QTimer, QRect, QSize, QProcess, QProcessEnvironment, QSettings
+from PySide6.QtCore import Qt, QObject, Signal, Slot, QThread, QTimer, QRect, QSize, QProcess, QProcessEnvironment, QSettings, QTime
 from PySide6.QtGui import QIcon, QKeySequence, QShortcut, QFont, QImage, QGuiApplication
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QFrame, QHBoxLayout,
                                QVBoxLayout, QLabel, QSpinBox, QFileDialog, QMessageBox,
@@ -29,6 +29,7 @@ from capture_ipc import encode_packet, decode_packet
 from recording_flow import fullscreen_region
 from region_selector import RegionSelector
 from editor import GifProject
+from trim_logic import start_frame_at_ms, end_frame_at_ms, selection_duration_ms, format_timestamp
 from theme import PALETTES, stylesheet, inspector_action_style, inspector_field_style
 from modern_theme import modern_stylesheet
 from recorder import RecorderError, ffmpeg_binary
@@ -152,6 +153,8 @@ class GifRipper(QMainWindow):
         self.index = 0
         self.mark_in = 0
         self.mark_out = 0
+        saved_unit = self.settings.value('editor/selection_unit', 'frames')
+        self.trim_unit = saved_unit if saved_unit in ('frames', 'time') else 'frames'
         self.playing = False
         self.busy = False
         self.recording = False
@@ -233,6 +236,39 @@ class GifRipper(QMainWindow):
         else:
             self.record_action()
 
+    def set_trim_unit(self, unit: str):
+        """Switch both input fields and the timeline without moving selected frames."""
+        if unit not in ('frames', 'time'):
+            return
+        self.trim_unit = unit
+        self.settings.setValue('editor/selection_unit', unit)
+        for prefix in ('trim', 'timeline'):
+            getattr(self, prefix + '_frames_btn').setChecked(unit == 'frames')
+            getattr(self, prefix + '_time_btn').setChecked(unit == 'time')
+        self.start_value_stack.setCurrentIndex(0 if unit == 'frames' else 1)
+        self.end_value_stack.setCurrentIndex(0 if unit == 'frames' else 1)
+        self.timeline.set_unit(unit)
+        self.update_project_ui()
+
+    def _time_ms(self, value: QTime) -> int:
+        return QTime(0, 0, 0).msecsTo(value)
+
+    def _edit_start_time(self, value: QTime):
+        if self.project and not self.busy:
+            self.change_mark_in(start_frame_at_ms(self.project.prefix_ms, self._time_ms(value)))
+
+    def _edit_end_time(self, value: QTime):
+        if self.project and not self.busy:
+            self.change_mark_out(end_frame_at_ms(self.project.prefix_ms, self._time_ms(value)))
+
+    def change_mark_in(self, index: int):
+        if self.project and not self.busy:
+            self.update_marks(min(max(0, index), self.mark_out), self.mark_out)
+
+    def change_mark_out(self, index: int):
+        if self.project and not self.busy:
+            self.update_marks(self.mark_in, max(self.mark_in, min(self.project.count - 1, index)))
+
     def open_recent_gif(self):
         recent = self.settings.value('library/last_opened', '')
         if recent and Path(str(recent)).is_file():
@@ -268,8 +304,9 @@ class GifRipper(QMainWindow):
         p = self.project
         loaded = p is not None
         for w in [self.save_btn,self.first_btn,self.prev_btn,self.play_btn,self.stop_btn,
-                  self.next_btn,self.last_btn,self.in_spin,self.out_spin,self.mark_in_btn,
-                  self.mark_out_btn,self.cut_btn,self.trim_before,self.trim_after,self.reset_btn]:
+                  self.next_btn,self.last_btn,self.in_spin,self.out_spin,self.in_time,self.out_time,
+                  self.mark_in_btn,self.mark_out_btn,self.cut_btn,self.keep_btn,
+                  self.trim_before,self.trim_after,self.reset_btn]:
             w.setEnabled(loaded and not self.busy)
         if not loaded:
             for ctrl in [self.mark_in_btn, self.mark_out_btn, self.cut_btn,
@@ -300,18 +337,39 @@ class GifRipper(QMainWindow):
             self.out_spin.blockSignals(True)
             self.in_spin.setMaximum(p.count)
             self.out_spin.setMaximum(p.count)
+            # Changing maximumTime may emit timeChanged; block signals first
+            # to avoid re-entering update_project_ui during project loading.
+            self.in_time.blockSignals(True)
+            self.out_time.blockSignals(True)
+            time_limit = QTime(0, 0).addMSecs(min(p.total_ms, 86_399_999))
+            self.in_time.setMaximumTime(time_limit)
+            self.out_time.setMaximumTime(time_limit)
             self.mark_in = max(0,min(self.mark_in,p.count-1))
             self.mark_out = max(0,min(self.mark_out,p.count-1))
             self.in_spin.setValue(self.mark_in+1)
             self.out_spin.setValue(self.mark_out+1)
+            self.in_time.setTime(QTime(0, 0).addMSecs(min(p.position_ms(self.mark_in), 86_399_999)))
+            self.out_time.setTime(QTime(0, 0).addMSecs(min(p.prefix_ms[self.mark_out + 1], 86_399_999)))
+            self.in_time.blockSignals(False)
+            self.out_time.blockSignals(False)
             self.in_spin.blockSignals(False)
             self.out_spin.blockSignals(False)
+            selected = self.mark_out - self.mark_in + 1
+            span = selection_duration_ms(p.prefix_ms, self.mark_in, self.mark_out)
+            self.selection_summary.setText(
+                f'Vybráno {selected} z {p.count} snímků  ·  {format_timestamp(span)}')
+            self.cut_btn.setEnabled(not self.busy and selected < p.count)
+            self.keep_btn.setEnabled(not self.busy and selected < p.count)
             self.timeline.set_state(self.index,self.mark_in,self.mark_out)
-            self.time_label.setText(f'{fmt_ms(p.position_ms(self.index))} / {fmt_ms(p.total_ms)}')
+            self.time_label.setText(
+                f'Snímek {self.index + 1} / {p.count}' if self.trim_unit == 'frames'
+                else f'{fmt_ms(p.position_ms(self.index))} / {fmt_ms(p.total_ms)}')
         else:
             self.file_label.setText('Bez souboru')
             self.frame_count_label.setText('0 SNÍMKŮ')
-            self.time_label.setText('00:00.000 / 00:00.000')
+            self.time_label.setText('Snímek 0 / 0' if self.trim_unit == 'frames'
+                                    else '00:00.000 / 00:00.000')
+            self.selection_summary.setText('Tažením úchytů vyberte oblast střihu')
 
     def open_dialog(self):
         if self.busy or self.recording:
@@ -374,7 +432,7 @@ class GifRipper(QMainWindow):
         if not self.project or self.busy:
             return
         self.mark_in = max(0,min(a,self.project.count-1))
-        self.mark_out = max(0,min(b,self.project.count-1))
+        self.mark_out = max(self.mark_in, min(b, self.project.count - 1))
         self.update_project_ui()
 
     def apply_cut(self,first:int,last:int):
@@ -393,8 +451,25 @@ class GifRipper(QMainWindow):
         self.announce(f'Odstraněno {count} snímků. Ctrl+Z vrátí změnu.')
 
     def cut_range(self):
+        """Remove the selected interval; retain everything before and after it."""
         if self.project:
-            self.apply_cut(min(self.mark_in,self.mark_out),max(self.mark_in,self.mark_out))
+            self.apply_cut(self.mark_in, self.mark_out)
+
+    def keep_selected_range(self):
+        """Remove everything *outside* the selection in a single undo step."""
+        if not self.project or self.busy:
+            return
+        self.stop_playback()
+        try:
+            count = self.project.keep_range(self.mark_in, self.mark_out)
+        except Exception as e:
+            QMessageBox.warning(self, 'Střih nebyl proveden', str(e))
+            return
+        self.index = min(max(0, self.index - self.mark_in), self.project.count - 1)
+        self.mark_in, self.mark_out = 0, self.project.count - 1
+        self.timeline.set_project(self.project)
+        self.seek(self.index)
+        self.announce(f'Ponechán vybraný úsek; odstraněno {count} snímků. Ctrl+Z vrátí změnu.')
 
     def cut_before(self):
         if self.project and self.index>0:

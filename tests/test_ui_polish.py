@@ -10,9 +10,9 @@ APP = (ROOT / 'app.py').read_text(encoding='utf-8')
 
 def test_marker_fields_have_explicit_outside_and_inside_gutters():
     assert 'sc.setContentsMargins(0, 5, 0, 5)' in UI
-    assert 'fields.setContentsMargins(2, 7, 2, 6)' in UI
-    assert 'one = col(8)' in UI
-    assert 'two = col(8)' in UI
+    assert 'fields.setContentsMargins(4, 5, 4, 5)' in UI
+    assert 'one = col(7)' in UI
+    assert 'two = col(7)' in UI
 
 
 def test_fps_input_is_visible_and_styled():

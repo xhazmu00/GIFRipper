@@ -12,7 +12,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QStackedWidget,
-    QPushButton, QSpinBox, QScrollArea, QSizePolicy, QFileDialog,
+    QPushButton, QSpinBox, QTimeEdit, QScrollArea, QSizePolicy, QFileDialog,
 )
 
 from widgets import Stage, Timeline, button, pill, tag, ASSETS
@@ -53,6 +53,30 @@ def nav_button(title):
     b.setCheckable(True)
     b.setMinimumHeight(56)
     return b
+
+
+def unit_toggle(text):
+    b = QPushButton(text)
+    b.setObjectName('unitToggle')
+    b.setCheckable(True)
+    b.setCursor(Qt.CursorShape.PointingHandCursor)
+    b.setMinimumHeight(34)
+    b.setMinimumWidth(76)
+    return b
+
+
+def trim_unit_buttons(w, prefix):
+    """Two synchronized mode switches, both backed by selected frame indices."""
+    line = row(5)
+    frames = unit_toggle('▤  Snímky')
+    times = unit_toggle('◷  Čas')
+    setattr(w, prefix + '_frames_btn', frames)
+    setattr(w, prefix + '_time_btn', times)
+    frames.clicked.connect(lambda: w.set_trim_unit('frames'))
+    times.clicked.connect(lambda: w.set_trim_unit('time'))
+    line.addWidget(frames)
+    line.addWidget(times)
+    return line
 
 
 def setup_modern_ui(w):
@@ -133,6 +157,7 @@ def setup_modern_ui(w):
     w.capture_banner.hide()
     w.show_page(0)
     w.setStyleSheet(modern_stylesheet(w.theme))
+    w.set_trim_unit(w.trim_unit)
 
 
 def _make_record_page(w):
@@ -305,17 +330,18 @@ def _make_editor_page(w):
     t.setContentsMargins(16, 12, 16, 12)
     timeline_panel.setLayout(t)
     time_top = row(8)
-    time_top.addWidget(label('ČASOVÁ OSA  /  SNÍMKY', 'menuTitle'))
+    time_top.addWidget(label('ČASOVÁ OSA  /  VÝBĚR', 'menuTitle'))
     time_top.addStretch()
+    time_top.addLayout(trim_unit_buttons(w, 'timeline'))
     w.frame_count_label = pill('0 SNÍMKŮ')
     time_top.addWidget(w.frame_count_label)
     t.addLayout(time_top)
     w.timeline = Timeline()
-    w.timeline.setMinimumHeight(126)
-    w.timeline.setMaximumHeight(145)
+    w.timeline.setMinimumHeight(155)
+    w.timeline.setMaximumHeight(170)
     w.timeline.seek.connect(w.seek)
-    w.timeline.set_in.connect(lambda i: w.update_marks(i, w.mark_out))
-    w.timeline.set_out.connect(lambda i: w.update_marks(w.mark_in, i))
+    w.timeline.set_in.connect(w.change_mark_in)
+    w.timeline.set_out.connect(w.change_mark_out)
     t.addWidget(w.timeline)
     l.addWidget(timeline_panel)
     w.pages.addWidget(page)
@@ -323,44 +349,79 @@ def _make_editor_page(w):
 
 def _editor_trim_panel(w):
     p = QWidget()
-    sc = col(12)
+    sc = col(11)
     sc.setContentsMargins(0, 5, 0, 5)
     p.setLayout(sc)
-    sc.addWidget(label('Vystřihnout úsek', 'sectionHeading'))
-    sc.addWidget(label('Označte první a poslední snímek úseku, který chcete odstranit.', 'body', True))
-    sc.addSpacing(10)
-    sc.addWidget(tag('VÝBĚR ÚSEKU  ·  včetně krajních snímků'))
+    sc.addWidget(label('Výběr úseku', 'sectionHeading'))
+    sc.addWidget(label('Přetáhněte fialové úchyty na časové ose nebo zadejte OD / DO.', 'body', True))
+    sc.addSpacing(4)
+    sc.addLayout(trim_unit_buttons(w, 'trim'))
+    sc.addWidget(tag('ROZSAH  ·  výběr včetně krajních snímků'))
+
     fields = row(12)
-    fields.setContentsMargins(2, 7, 2, 6)
-    one = col(8)
+    fields.setContentsMargins(4, 5, 4, 5)
+    one = col(7)
     one.addWidget(tag('ZAČÁTEK  /  OD'))
+    w.start_value_stack = QStackedWidget()
     w.in_spin = QSpinBox()
     w.in_spin.setMinimum(1)
-    one.addWidget(w.in_spin)
-    fields.addLayout(one)
-    two = col(8)
+    w.in_spin.setMinimumHeight(42)
+    w.in_spin.setToolTip('Číslo prvního zahrnutého snímku (od 1).')
+    w.in_time = QTimeEdit()
+    w.in_time.setDisplayFormat('HH:mm:ss.zzz')
+    w.in_time.setMinimumHeight(42)
+    w.in_time.setToolTip('Zadejte čas a stiskněte Enter; výběr se přichytí na celý snímek.')
+    w.start_value_stack.addWidget(w.in_spin)
+    w.start_value_stack.addWidget(w.in_time)
+    one.addWidget(w.start_value_stack)
+    fields.addLayout(one, 1)
+
+    two = col(7)
     two.addWidget(tag('KONEC  /  DO'))
+    w.end_value_stack = QStackedWidget()
     w.out_spin = QSpinBox()
     w.out_spin.setMinimum(1)
-    two.addWidget(w.out_spin)
-    fields.addLayout(two)
+    w.out_spin.setMinimumHeight(42)
+    w.out_spin.setToolTip('Číslo posledního zahrnutého snímku (od 1).')
+    w.out_time = QTimeEdit()
+    w.out_time.setDisplayFormat('HH:mm:ss.zzz')
+    w.out_time.setMinimumHeight(42)
+    w.out_time.setToolTip('Zadejte koncový čas a stiskněte Enter (konec je za posledním vybraným snímkem).')
+    w.end_value_stack.addWidget(w.out_spin)
+    w.end_value_stack.addWidget(w.out_time)
+    two.addWidget(w.end_value_stack)
+    fields.addLayout(two, 1)
     sc.addLayout(fields)
-    w.in_spin.valueChanged.connect(lambda v: w.update_marks(v - 1, w.mark_out))
-    w.out_spin.valueChanged.connect(lambda v: w.update_marks(w.mark_in, v - 1))
+
+    w.in_spin.valueChanged.connect(lambda v: w.change_mark_in(v - 1))
+    w.out_spin.valueChanged.connect(lambda v: w.change_mark_out(v - 1))
+    # Commit time edits after Enter/focus loss; do NOT snap after each digit,
+    # otherwise a user cannot finish typing a timestamp.
+    w.in_time.editingFinished.connect(lambda: w._edit_start_time(w.in_time.time()))
+    w.out_time.editingFinished.connect(lambda: w._edit_end_time(w.out_time.time()))
+
     marks = row(9)
-    w.mark_in_btn = button('↤  Nastavit OD', size=43)
-    w.mark_out_btn = button('Nastavit DO  ↦', size=43)
-    w.mark_in_btn.clicked.connect(lambda: w.update_marks(w.index, w.mark_out))
-    w.mark_out_btn.clicked.connect(lambda: w.update_marks(w.mark_in, w.index))
-    marks.addWidget(w.mark_in_btn)
-    marks.addWidget(w.mark_out_btn)
+    w.mark_in_btn = button('↤  OD = aktuální snímek', size=40)
+    w.mark_out_btn = button('DO = aktuální snímek  ↦', size=40)
+    w.mark_in_btn.clicked.connect(lambda: w.change_mark_in(w.index))
+    w.mark_out_btn.clicked.connect(lambda: w.change_mark_out(w.index))
+    marks.addWidget(w.mark_in_btn, 1)
+    marks.addWidget(w.mark_out_btn, 1)
     sc.addLayout(marks)
-    w.cut_btn = button('✂  VYSTŘIHNOUT ÚSEK', 'danger', 46)
+
+    w.selection_summary = label('Tažením úchytů vyberte oblast střihu', 'selectionSummary', True)
+    sc.addWidget(w.selection_summary)
+    w.cut_btn = button('✂  Odstranit vybraný úsek', 'danger', 46)
+    w.cut_btn.setToolTip('Vymaže výběr a spojí snímky vlevo a vpravo.')
     w.cut_btn.clicked.connect(w.cut_range)
     sc.addWidget(w.cut_btn)
+    w.keep_btn = button('▣  Ponechat pouze výběr', 'accent', 46)
+    w.keep_btn.setToolTip('Odstraní vše před výběrem i za ním; jeden krok historie.')
+    w.keep_btn.clicked.connect(w.keep_selected_range)
+    sc.addWidget(w.keep_btn)
+    sc.addWidget(label('Čas potvrďte Enterem. Výběr se přichytí na hranice celých GIF snímků.', 'hint', True))
     sc.addStretch(1)
     w.inspector_pages.addWidget(p)
-
 
 def _editor_quick_panel(w):
     p = QWidget()
@@ -472,6 +533,8 @@ def apply_modern_theme(w):
         ctrl.setStyleSheet(inspector_action_style(w.theme, role))
     w.in_spin.setStyleSheet(inspector_field_style(w.theme, 'mark_in'))
     w.out_spin.setStyleSheet(inspector_field_style(w.theme, 'mark_out'))
+    w.in_time.setStyleSheet(inspector_field_style(w.theme, 'mark_in').replace('QSpinBox', 'QTimeEdit'))
+    w.out_time.setStyleSheet(inspector_field_style(w.theme, 'mark_out').replace('QSpinBox', 'QTimeEdit'))
     w.fps_spin.setStyleSheet('''QSpinBox {color:%s;background:%s;border:2px solid %s;
         border-radius:11px;padding:9px 11px;font-size:14px;font-weight:750;}
         QSpinBox::up-button,QSpinBox::down-button {width:18px;border:none;}'''

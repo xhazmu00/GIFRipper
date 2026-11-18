@@ -99,6 +99,22 @@ class GifProject:
         self._update_timeline()
         return deleted
 
+    def keep_range(self, first: int, last: int) -> int:
+        """Keep only the inclusive selection; one undo step, original untouched.
+
+        Returns the number of removed frames.  Selecting the complete GIF
+        is a harmless no-op (and does not create a history entry).
+        """
+        if not (0 <= first <= last < self.count):
+            raise ValueError('Neplatný rozsah snímků.')
+        removed = self.count - (last - first + 1)
+        if removed == 0:
+            return 0
+        self._save_undo()
+        self.kept = self.kept[first:last + 1]
+        self._update_timeline()
+        return removed
+
     def undo(self) -> bool:
         if not self._undo:
             return False
