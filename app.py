@@ -22,14 +22,16 @@ from PySide6.QtCore import Qt, QObject, Signal, Slot, QThread, QTimer, QRect, QS
 from PySide6.QtGui import QIcon, QKeySequence, QShortcut, QFont, QImage, QGuiApplication
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QFrame, QHBoxLayout,
                                QVBoxLayout, QLabel, QSpinBox, QFileDialog, QMessageBox,
-                               QSizePolicy, QScrollArea, QGraphicsDropShadowEffect, QDialog)
+                               QSizePolicy, QScrollArea, QGraphicsDropShadowEffect)
 from PySide6.QtGui import QColor
 
 from capture_ipc import encode_packet, decode_packet
+from recording_flow import fullscreen_region
+from region_selector import RegionSelector
 from editor import GifProject
 from theme import PALETTES, stylesheet, inspector_action_style, inspector_field_style
 from recorder import RecorderError, ffmpeg_binary
-from widgets import Aurora, Stage, Timeline, RegionDialog, button, pill, tag, ASSETS, LIME, MUTED
+from widgets import Aurora, Stage, Timeline, button, pill, tag, ASSETS, LIME, MUTED
 
 
 def fmt_ms(value: int) -> str:
@@ -164,6 +166,8 @@ class GifRipper(QMainWindow):
         self._countdown_remaining = 0
         self._pending_capture_rect = None
         self._capture_backend = ''
+        self._record_mode = 'full'
+        self._region_picker: RegionSelector | None = None
         self._countdown_timer = QTimer(self)
         self._countdown_timer.timeout.connect(self._countdown_step)
         self._agent_recording = False
@@ -178,7 +182,6 @@ class GifRipper(QMainWindow):
         self._agent_wait_timer.setSingleShot(True)
         self._agent_wait_timer.timeout.connect(self.capture_timeout)
         self.capture_bar: CaptureBar | None = None
-        self.selecting_region = False
         self._play_timer = QTimer(self)
         self._play_timer.setSingleShot(True)
         self._play_timer.timeout.connect(self.next_playback_frame)
@@ -215,12 +218,23 @@ class GifRipper(QMainWindow):
         header.addLayout(branding)
         header.addStretch()
         self.open_btn = button('↗  Otevřít GIF',size=42)
-        self.rec_btn = button('●  Nahrát obrazovku', 'danger',size=42)
+        self.rec_btn = button('●  Nahrát celou obrazovku', 'danger',size=42)
+        self.region_btn = None
+        # Windows offers two explicit routes. Other systems retain their
+        # working fullscreen capture path (GNOME Wayland is unchanged).
+        if sys.platform == 'win32':
+            self.region_btn = button('▣  Nahrát výseč obrazovky', size=42)
+            self.region_btn.setToolTip('Tažením myši vyber oblast. Při puštění začne odpočet.')
         self.save_btn = button('↓  Export GIF', 'accent',size=42)
-        for b in [self.open_btn,self.rec_btn,self.save_btn]:
-            header.addWidget(b)
+        header.addWidget(self.open_btn)
+        header.addWidget(self.rec_btn)
+        if self.region_btn:
+            header.addWidget(self.region_btn)
+        header.addWidget(self.save_btn)
         self.open_btn.clicked.connect(self.open_dialog)
         self.rec_btn.clicked.connect(self.record_action)
+        if self.region_btn:
+            self.region_btn.clicked.connect(self.record_region_action)
         self.save_btn.clicked.connect(self.export_dialog)
         root.addLayout(header)
 
@@ -419,7 +433,7 @@ class GifRipper(QMainWindow):
         self.status.setObjectName('statusText')
         status.addWidget(self.status)
         status.addStretch()
-        status.addWidget(tag('GIFRIPPER 2.8  •   CROSS-PLATFORM', '#66738b',9))
+        status.addWidget(tag('GIFRIPPER 3.0  •   CROSS-PLATFORM', '#66738b',9))
         status.addSpacing(12)
         # Appearance is a secondary preference, deliberately kept away from
         # Open / Record / Export in the primary toolbar.
@@ -526,7 +540,9 @@ class GifRipper(QMainWindow):
                                 (not self.busy and (not self.recording or not self._agent_recording)))
         self.rec_btn.setText('×  Zrušit dokončení' if self.finishing_capture else
                              '×  Zrušit čekání' if self.recording and not self._agent_recording else
-                             '●  Nahrát obrazovku')
+                             '●  Nahrát celou obrazovku')
+        if self.region_btn:
+            self.region_btn.setEnabled(not self.busy and not self.recording)
         self.open_btn.setEnabled(not self.busy and not self.recording)
         if loaded:
             self.file_label.setText(p.path.name[:32])
@@ -751,8 +767,14 @@ class GifRipper(QMainWindow):
         elif not self.recording:
             self.begin_capture()
 
-    def begin_capture(self):
+    def record_region_action(self):
+        if sys.platform == 'win32' and not self.recording and not self.busy:
+            self.begin_capture(mode='region')
+
+    def begin_capture(self, mode='full'):
         if self.recording or self.busy:
+            return
+        if mode == 'region' and sys.platform != 'win32':
             return
         try:
             ffmpeg_binary()
@@ -762,13 +784,13 @@ class GifRipper(QMainWindow):
         self.stop_playback()
         self.recording = True
         self.finishing_capture = False
-        self.selecting_region = False
         self._agent_recording = False
         self._agent_ready = False
         self._agent_saved_path = None
         self._countdown_timer.stop()
         self._pending_capture_rect = None
         self._capture_backend = ''
+        self._record_mode = mode
         self._agent_stdout.clear()
         self._agent_stderr.clear()
         self._recording_paused = False
@@ -778,6 +800,18 @@ class GifRipper(QMainWindow):
         self._capture_wait_started = time.monotonic()
         self._set_capture_status('launch', 'Spouštím pomocný proces nahrávání…')
         self._capture_ui_timer.start()
+        if mode == 'region':
+            # Hide before the helper takes its preview. Otherwise the screenshot
+            # contains GIFRipper itself instead of the intended desktop.
+            self.hide()
+            QTimer.singleShot(220, self._launch_capture_agent)
+        else:
+            self._launch_capture_agent()
+        self.update_project_ui()
+
+    def _launch_capture_agent(self):
+        if not self.recording or self.capture_process is not None:
+            return
         proc = QProcess(self)
         self.capture_process = proc
         proc.readyReadStandardOutput.connect(self._read_agent_stdout)
@@ -795,8 +829,10 @@ class GifRipper(QMainWindow):
         else:
             proc.start(sys.executable, ['-u', str(Path(__file__).resolve().parent/'capture_agent.py')])
         self._agent_wait_timer.start(12000 if os.environ.get('XDG_SESSION_TYPE','').lower() == 'wayland' else 23000)
-        self._set_capture_status('permission', 'Čekám na první snímek obrazovky / případné systémové povolení…')
-        self.update_project_ui()
+        description = ('Pořizuji snímek monitoru pro výběr výseče…'
+                       if self._record_mode == 'region' else
+                       'Připravuji záznam celé obrazovky / případné systémové povolení…')
+        self._set_capture_status('permission', description)
 
     def _send_capture_command(self, action: str, **data):
         proc = self.capture_process
@@ -843,16 +879,18 @@ class GifRipper(QMainWindow):
             self._agent_wait_timer.stop()
             self._capture_backend = str(packet.get('backend') or '')
             self._begin_countdown(None, direct=True)
-        elif name == 'preview' and not self.selecting_region and not self._agent_recording:
+        elif name == 'preview' and not self._agent_recording:
             self._agent_wait_timer.stop()
-            image = QImage(str(packet.get('path','')))
-            if image.isNull():
-                self.fail_capture('Náhled obrazovky se nepodařilo načíst.')
-                return
             self._agent_ready = True
-            self.selecting_region = True
-            # Avoid a modal dialog within QProcess::readyRead callback.
-            QTimer.singleShot(0, lambda image=image: self.pick_region(image))
+            if self._record_mode == 'region' and sys.platform == 'win32':
+                self._show_region_selector(packet)
+                return
+            try:
+                region = fullscreen_region(packet.get('width'), packet.get('height'))
+            except ValueError as exc:
+                self.fail_capture(str(exc))
+                return
+            self._begin_countdown(region, direct=True)
         elif name == 'started':
             self._countdown_timer.stop()
             self._capture_backend = str(packet.get('backend') or '')
@@ -895,18 +933,51 @@ class GifRipper(QMainWindow):
         elif name == 'error':
             self.fail_capture(str(packet.get('message') or 'Neznámá chyba záznamu.'))
 
-    def pick_region(self, image: QImage):
-        if not self.recording or not self._agent_ready:
+    def _show_region_selector(self, packet):
+        try:
+            path = str(packet.get('path') or '')
+            image = QImage(path)
+            if image.isNull():
+                raise ValueError('Z procesu nahrávání nelze načíst náhled obrazovky.')
+            # Match the exact preview dimensions to avoid recording another
+            # monitor, or a crop shifted by DPI scaling.
+            dimensions = fullscreen_region(packet.get('width'), packet.get('height'))
+            if image.width() != dimensions[2] or image.height() != dimensions[3]:
+                raise ValueError('Rozměry náhledu nesouhlasí s nahrávanou obrazovkou.')
+            screen = QGuiApplication.primaryScreen()
+            if screen is None:
+                raise ValueError('Windows nevrací žádný aktivní monitor.')
+            self._region_picker = RegionSelector(image, screen)
+            self._region_picker.selected.connect(self._region_selected)
+            self._region_picker.cancelled.connect(self._region_cancelled)
+            self._region_picker.show()
+            self._region_picker.raise_()
+            self._region_picker.activateWindow()
+            self._region_picker.setFocus()
+            self._set_capture_status('selection', 'Tažením myši vyber oblast. Esc výběr zruší.')
+        except Exception as exc:
+            self.fail_capture('Výběr oblasti nelze otevřít: ' + str(exc))
+
+    def _dismiss_region_picker(self):
+        picker = self._region_picker
+        self._region_picker = None
+        if picker is not None:
+            picker.hide()
+            picker.deleteLater()
+
+    def _region_selected(self, region):
+        if not self.recording or self._record_mode != 'region':
             return
-        dialog = RegionDialog(image, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
+        self._dismiss_region_picker()
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+        self._begin_countdown(region, direct=False)
+
+    def _region_cancelled(self):
+        if self.recording:
             self.release_capture()
-            self.announce('Záznam zrušen.')
-            return
-        rect = dialog.selected_region()
-        self.selecting_region = False
-        self._agent_ready = False
-        self._begin_countdown([rect.x(), rect.y(), rect.width(), rect.height()])
+            self.announce('Výběr výseče byl zrušen.')
 
     def _begin_countdown(self, region, direct=False):
         """A real 3 s countdown BEFORE invoking screen recording."""
@@ -943,7 +1014,7 @@ class GifRipper(QMainWindow):
             if self.finishing_capture:
                 reason = 'Dokončení záznamu překročilo časový limit.'
             elif self._capture_phase == 'arming':
-                reason = 'Po výběru oblasti nepřišel žádný živý snímek. Nahrávání se nespustilo.'
+                reason = 'Po odpočtu nepřišel žádný živý snímek. Nahrávání se nespustilo.'
             elif os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland':
                 reason = ('Záznam nedostal během několika sekund snímek z Waylandu. '
                           'Zkontroluj systémový výběr monitoru, PipeWire a xdg-desktop-portal. '
@@ -1021,8 +1092,8 @@ class GifRipper(QMainWindow):
         self._countdown_timer.stop()
         self.capture_banner.hide()
         self.recording = False
-        self.selecting_region = False
         self._pending_capture_rect = None
+        self._dismiss_region_picker()
         self._agent_recording = False
         self._agent_ready = False
         self.finishing_capture = False

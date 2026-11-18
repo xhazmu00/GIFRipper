@@ -1,3 +1,23 @@
+# GIFRipper 3.0 — dva režimy záznamu ve Windows
+
+- Windows: dvě samostatná tlačítka „Nahrát celou obrazovku“ a „Nahrát výseč obrazovky“.
+- Nahrávání celé plochy běží beze změny; výběr výseče otevře vlastní fullscreen screenshot overlay s tažením myši a automatickým potvrzením při puštění.
+- Před pořízením náhledu se editor schová, takže výběr zobrazuje skutečnou pracovní plochu.
+- Výběr regionu se mapuje na fyzické pixely téhož primárního monitoru, který používá Qt ScreenCapture; správně při různém DPI (100, 125, 150, 200 %).
+- Esc výběr zruší; příliš malý region vyzve k opětovnému výběru.
+- Žádný vnořený QDialog, žádná samostatná lišta tlačítek a žádné velké okraje.
+- Ubuntu GNOME Wayland a ostatní nahrávací backendy zůstaly funkčně stejné.
+- Nové automatické testy oblasti i UI propojení. Skutečné vykreslení a reálný záznam na Windows je potřeba ověřit na Windows.
+
+# GIFRipper 2.9
+
+- Windows, X11 a Qt/macOS: výběrové okno pro označení oblasti bylo vyřazeno z procesu nahrávání. Náhled se pouze použije k získání rozměrů obrazovky a automaticky následuje odpočet 3–2–1.
+- Záznam se zahajuje přes plný obdélník `[0, 0, šířka, výška]` v pixelech backendu; správně reaguje na škálování Windows.
+- Hlavní tlačítko je nyní označeno „Nahrát celou obrazovku“.
+- Ubuntu GNOME Wayland a samotné nahrávací backendy byly zachovány beze změny.
+- Výběr malé oblasti je dočasně vypnutý, dokud nebude bezpečně přepracován.
+- Přidány regresní testy automatického startu a validace rozměrů obrazovky.
+
 # GIFRipper 2.8
 
 - Windows / X11 / Qt: výběrové okno nahrazeno bezrámečkovým fullscreen overlayem se screenshotem jako pozadím a kompaktní plovoucí lištou.

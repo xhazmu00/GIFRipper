@@ -101,6 +101,10 @@ class CaptureAgent(QObject):
         # direct ffmpeg backend is more reliable and avoids a native portal.
         if self.mode == 'qt':
             self.screen_capture = QScreenCapture(self)
+            # Region overlay on Windows covers the primary monitor. Capture
+            # that same monitor rather than an implicit platform default.
+            if sys.platform == 'win32' and self.app.primaryScreen() is not None:
+                self.screen_capture.setScreen(self.app.primaryScreen())
             self.capture_session = QMediaCaptureSession(self)
             self.sink = QVideoSink(self)
             self.capture_session.setScreenCapture(self.screen_capture)

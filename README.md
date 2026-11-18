@@ -1,15 +1,33 @@
-# 🎩 GIFRipper 2.8 — Capture / Frame Editor
+# 🎩 GIFRipper 3.0 — Capture / Frame Editor
 
 Desktopový editor a rekordér GIFů inspirovaný LICEcap. Samostatná implementace, nikoli fork LICEcap.
 
-**Novinky verze 2.8 – výběr oblasti na Windows / X11 / macOS:**
+**Novinky 3.0 – dva způsoby nahrávání pro Windows:**
+
+- **Nahrát celou obrazovku:** původní spolehlivá větev. Kliknutí → první snímek z Qt → odpočet 3–2–1 → záznam primárního monitoru. Žádné výběrové okno.
+- **Nahrát výseč obrazovky:** nejdříve schová okno GIFRipperu a pořídí snímek primárního monitoru přes *stejný* Qt backend, který bude nahrávat. Potom ukáže tento snímek přes celý monitor jako jednoduchý overlay: **klikni a táhni levým tlačítkem myši, pusť → potvrdí se výběr → odpočet 3–2–1 → nahrávání výseče**.
+- **Esc** zruší výběr bez záznamu. Pro malý výběr se ukáže upozornění a můžeš ho vybrat znovu (minimum 80 × 60 px).
+- Žádné velké dialogové okno, žádný potvrzovací panel ani tlačítko „Celá obrazovka“ uvnitř výběru. Obraz je vykreslen přes celou plochu monitoru.
+- Souřadnice výběru se přesně převádějí z Qt logických pixelů na fyzické pixely zachytávaného monitoru (testy pokrývají 100 %, 125 %, 150 % i 200% škálování).
+- **Ubuntu GNOME Wayland:** nadále používá dosavadní funkční nativní GNOME rekordér, který nahrává celou plochu. **macOS/Linux:** mají zatím jedno tlačítko pro celou obrazovku. Windows má obě tlačítka.
+- Výběr se týká primárního monitoru. Nahrávání jiné obrazovky nebo kombinace více monitorů zatím není součástí této verze.
+- Během nahrávání může být plovoucí ovládací panel vidět v zaznamenaném výřezu, pokud leží uvnitř vybrané oblasti; lze jej odsunout mimo tuto oblast.
+- **Ověření:** automatické testy střihu, backendů, překladu souřadnic a integrace obou tlačítek. Testy skutečného grafického okna na Windows vyžadují počítač s Windows; z tohoto prostředí to nešlo potvrdit.
+
+**Historie 2.9 – nahrávání celé obrazovky:**
+
+- Windows, X11 a Qt/macOS: výběrové okno bylo vyřazeno. Náhled poskytuje rozměry celé obrazovky a následuje odpočet 3–2–1.
+- Windows full-screen režim je zachován jako samostatná volba.
+- Ubuntu GNOME Wayland a nahrávací backendy zůstaly beze změny.
+
+**Historie: 2.8 – původní pokus o výběr oblasti (ve 2.9 deaktivován):**
 
 - **Bez velkého okna:** výběr oblasti nově zobrazuje screenshot přes celou plochu bez rámů a horní lišty. Ovládací prvky jsou v malém plovoucím panelu dole; už nepřekáží rozměrný dialog 980 × 660 px.
 - **Celá obrazovka rovnou spustí záznam:** původní tlačítko jen mazalo výběr; nyní potvrdí celý náhled a pokračuje 3sekundovým odpočtem. Druhý klik na Začít není potřeba.
 - **Výběr tažením myší:** přesný zelený rámeček a ztmavené okolí, popisek rozlišení, Enter = potvrdit, Esc = zrušit.
 - **Oprava souřadnic a kraje:** převod souřadnic náhledu na skutečné pixely záznamu počítá s vysokým DPI/škálováním Windows (např. 125 %); funguje také výběr od levého horního rohu.
 - **Ubuntu GNOME Wayland:** beze změn; dál se používá ověřená celoplošná větev GNOME Shell ScreenCast. Výběr regionu v této větvi zatím není implementován.
-- Na Windows zatím není možné v tomto testovacím prostředí spustit reálné Qt GUI; ověřeno staticky, testy a kontrolou Python syntaxe.
+- Tento výběr už se ve verzi 2.9 neotevírá.
 
 **Z verze 2.7 – oprava nahrávání na Windows:**
 
@@ -70,7 +88,7 @@ sudo apt install python3 python3-venv ffmpeg \
 Rozbal ZIP do vlastní složky (doporučeno **nedávat novou verzi přes starou**), potom:
 
 ```bash
-cd GIFRipper-v2.8
+cd GIFRipper-v3.0
 chmod +x run.sh
 ./run.sh
 ```
@@ -79,7 +97,7 @@ chmod +x run.sh
 
 **Ubuntu GNOME Wayland (výchozí v 2.3):** Po stisku **Nahrát obrazovku** se zobrazí odpočet **3, 2, 1**. Program schová editor a pokusí se spustit nativní GNOME Shell ScreenCast přes D-Bus. Zaznamenává zatím **celou plochu**, bez výběru oblasti a bez pauzy. Po zastavení zvolíš cílový GIF, FFmpeg provede konverzi a výsledek se otevře v editoru. Systém při nahrávání zobrazuje vlastní indikátor. Na některých konfiguracích může GNOME D-Bus rekordér záznam odmítnout; v tom případě aplikace zobrazí konkrétní chybu. GNOME backend verze 2.3 byl úspěšně vyzkoušen na uživatelském Ubuntu s Waylandem. Na jiných konfiguracích fungování nelze garantovat.
 
-**Ostatní Wayland / vynucené Qt:** Qt Multimedia ScreenCapture využívá XDG Desktop Portal + PipeWire. Nejprve je nezbytné systémové povolení, pak statický náhled a výběr oblasti, a **až potom 3sekundový odpočet**. Funkce je v Qt experimentální a nemusí fungovat na každém desktopu.
+**Ostatní Wayland / vynucené Qt:** Qt Multimedia ScreenCapture využívá XDG Desktop Portal + PipeWire. Nejprve je nezbytné systémové povolení, pak načtení prvního snímku a **3sekundový odpočet**. Funkce je v Qt experimentální a nemusí fungovat na každém desktopu.
 
 **Linux X11:** Nově se používá FFmpeg `x11grab` v izolovaném procesu; tento backend byl ověřen pomocí Xvfb. Snímky se posílají do asynchronní fronty FFmpeg pro export.
 
@@ -114,7 +132,7 @@ Aplikace pro macOS je implementována, ale **na skutečném Macu nebyla otestov�
 ## Použití
 
 - **GNOME Wayland:** **Nahrát obrazovku** → **3…2…1** → nahrávání celého monitoru/plochy → **Zastavit a uložit**.
-- **X11, Windows, macOS, ostatní Qt:** **Nahrát obrazovku** → v bezrámečkovém náhledu označit oblast → **Nahrát výběr** (nebo rovnou **Celá obrazovka**) → **3…2…1** → nahrávání.
+- **X11, Windows, macOS, ostatní Qt:** **Nahrát celou obrazovku** → načtení snímku → **3…2…1** → nahrávání celé obrazovky. Žádné okno pro výběr oblasti se nezobrazí.
 - Plovoucí lišta má **Pauza/Pokračovat** a **Zastavit a uložit**.
 - **Otevřít GIF**, poté šipky ←/→ pro krokování snímků; mezerník pro přehrávání.
 - **Označit OD/DO** pomocí spinboxů, tlačítek, Shift+klik a Alt+klik na časové ose. **Vystřihnout úsek** odstraní obě krajní snímky včetně obsahu mezi nimi.
@@ -123,7 +141,7 @@ Aplikace pro macOS je implementována, ale **na skutečném Macu nebyla otestov�
 
 ### Když obrazovka opět nefunguje
 
-Při kliknutí na nahrávání uvidíš v horní části **stavový pruh**, který říká, na co program čeká. Pokud se neobjeví ani náhled monitoru, automaticky zobrazí konkrétní chybu. Hlavní okno zůstává ovladatelné. Klikni na **× Zrušit čekání** nebo **× Zrušit dokončení**. Aplikace pomocný proces ukončí; při systémové chybě se pokusí zobrazit detail.
+Při kliknutí na nahrávání uvidíš v horní části **stavový pruh**, který říká, na co program čeká. Pokud backend nevrátí první snímek monitoru, automaticky zobrazí konkrétní chybu. Hlavní okno zůstává ovladatelné. Klikni na **× Zrušit čekání** nebo **× Zrušit dokončení**. Aplikace pomocný proces ukončí; při systémové chybě se pokusí zobrazit detail.
 
 ```bash
 echo "$XDG_SESSION_TYPE"
@@ -148,7 +166,7 @@ Pomocný proces je teď oddělený **kvůli stabilitě UI**, ne jako zaručená 
 
 ## Výkon a časování
 
-Nahrávání je ve výchozím stavu **12 FPS**, nastavit lze 1–30. FFmpeg dočasně ukládá bezeztrátové video, ze kterého po zastavení vytváří paletový GIF. Pro pomalý počítač/4K doporučujeme zvolit menší oblast a 8–12 FPS. Pokud je enkodér přetížený, fronta zahodí nadbytečné snímky místo zamrznutí; tím může být výsledná animace kratší než skutečný záznam. Aplikace počet vynechaných snímků ukazuje.
+Nahrávání je ve výchozím stavu **12 FPS**, nastavit lze 1–30. FFmpeg dočasně ukládá bezeztrátové video, ze kterého po zastavení vytváří paletový GIF. Pro pomalý počítač/4K doporučujeme 8–12 FPS. Pokud je enkodér přetížený, fronta zahodí nadbytečné snímky místo zamrznutí; tím může být výsledná animace kratší než skutečný záznam. Aplikace počet vynechaných snímků ukazuje.
 
 ## Testy
 
@@ -167,7 +185,7 @@ capture_agent.py   izolovaný Qt/portal/X11 worker, JSON IPC
 x11_capture.py    ověřený FFmpeg X11 snímek a živé snímkování
 recorder.py        FFmpeg + asynchronní fronta nahrávaných snímků
 editor.py          střih GIFů / undo / redo / export
-widgets.py         tmavé rozhraní, náhled, časová osa, výběr oblasti
+widgets.py         rozhraní, náhled, časová osa (nepoužívané staré widgety výběru oblasti zůstávají pro budoucí přepracování)
 assets/            logo GIFRipper a ikony
 bin/               místo pro volitelný lokální FFmpeg
 run.sh             spuštění Linux
@@ -210,4 +228,4 @@ Po 3sekundovém odpočtu nahrává 3 sekundy a uloží `wayland-test.gif`. Pokud
 
 Z adresáře projektu: `python -m pytest tests/test_windows_ipc.py -q` (pro celou sadu `python -m pytest -q`). Test simuluje systémové kódování `cp1250`, běžné na českých Windows.
 
-Nejjednodušší je rozbalit celý ZIP verze 2.8 do nové složky a spustit `run_windows.bat`. Pokud používáš GitHub, nejdřív nahraj změny verze 2.7 do svého repozitáře z Ubuntu (`git add .`, `git commit`, `git push`); teprve potom můžeš aktualizovat Windows příkazem `git pull`. **Nepřenášej samotný `capture_agent.py` bez nového souboru `capture_ipc.py`.**
+Nejjednodušší je rozbalit celý ZIP verze 3.0 do nové složky a spustit `run_windows.bat`. Pokud používáš GitHub, nejdřív nahraj změny verze 3.0 do svého repozitáře z Ubuntu (`git add .`, `git commit`, `git push`); teprve potom můžeš aktualizovat Windows příkazem `git pull`. **Nepřenášej samotný `capture_agent.py` bez nového souboru `capture_ipc.py`.**
